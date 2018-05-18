@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<executable>
+  <category>Detection</category>
+  <title>Find image with a mask</title>
+  <version>1.0.0</version>
+  <description>
+    find the structuring element in the image, e.x., text
+  </description>
+  <contributor>Juan Carlos Prieto</contributor>
+
+  <parameters>
+    <label>Input parameters</label>
+    <description>Input parameters</description>
+
+    <image>
+      <name>inputImageFilename</name>
+      <label>Input volume</label>
+      <channel>input</channel>
+      <description>Input image grayscale</description>
+      <longflag>img</longflag>
+    </image>
+
+    <image>
+      <name>inputLabelFilename</name>
+      <label>Input label image</label>
+      <channel>input</channel>
+      <description>Input labeled image with 0 for background and objects with l > 0</description>
+      <longflag>label</longflag>
+    </image>
+
+    <boolean>
+      <name>lumFilter</name>
+      <label>Apply luminance filter transformation to input, i.e., the input is a .jpg</label>
+      <channel>input</channel>
+      <description>Set if input image in jpg format or png etc.</description>
+      <longflag>lumFilter</longflag>
+    </boolean>
+
+    <integer>
+      <name>labelValue</name>
+      <label>Input label number</label>
+      <channel>input</channel>
+      <description>Number of label to use in the label image</description>
+      <longflag>labelValue</longflag>
+      <default>1</default>
+    </integer>
+
+  </parameters>
+
+  <parameters>
+    <label>Ouput parameters</label>
+    <description>Output parameters</description>
+
+    <string>
+      <name>outputFilename</name>
+      <label>Output filename</label>
+      <channel>output</channel>
+      <description>Write an output file with the statistics in json format</description>
+      <longflag>out</longflag>
+      <default>out.json</default>
+    </string>
+
+  </parameters>
+</executable>

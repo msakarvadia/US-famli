@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<executable>
+  <category>Detection</category>
+  <title>Find structure in image</title>
+  <version>1.0.0</version>
+  <description>
+    find the structuring element in the image
+  </description>
+  <contributor>Juan Carlos Prieto</contributor>
+
+  <parameters>
+    <label>Input parameters</label>
+    <description>Input parameters</description>
+
+    <image>
+      <name>inputImageFilename</name>
+      <label>Input volume</label>
+      <channel>input</channel>
+      <description>Input image grayscale</description>
+      <longflag>img</longflag>
+    </image>
+
+    <image>
+      <name>inputLabelFilename</name>
+      <label>Input label image</label>
+      <channel>input</channel>
+      <description>Input labeled image with 0 for background and objects with l > 0</description>
+      <longflag>label</longflag>
+    </image>
+
+    <boolean>
+      <name>lumFilter</name>
+      <label>Apply luminance filter transformation to input, i.e., the input is a .jpg</label>
+      <channel>input</channel>
+      <description>Set if input image in jpg format or png etc.</description>
+      <longflag>lumFilter</longflag>
+    </boolean>
+
+  </parameters>
+
+  <parameters>
+    <label>Ouput parameters</label>
+    <description>Output parameters</description>
+
+    <image>
+      <name>outputImageFilename</name>
+      <label>Output label image</label>
+      <channel>output</channel>
+      <description>Write the output of detected objects in the image</description>
+      <longflag>out</longflag>
+      <default>out.nrrd</default>
+    </image>
+
+  </parameters>
+</executable>

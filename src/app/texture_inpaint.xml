@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="utf-8"?>
+<executable>
+  <category>Texture synthesis</category>
+  <title>Magically remove objects from the image</title>
+  <version>1.0.0</version>
+  <description>
+    Given an image and a label map region it will remove the labeled region using a texture synthesis approach
+  </description>
+  <contributor>Juan Carlos Prieto</contributor>
+
+  <parameters>
+    <label>Input parameters</label>
+    <description>Input parameters</description>
+
+    <image>
+      <name>inputImageFilename</name>
+      <label>Input volume</label>
+      <channel>input</channel>
+      <description>Input image grayscale</description>
+      <longflag>img</longflag>
+    </image>
+
+    <image>
+      <name>inputLabelFilename</name>
+      <label>Input label image</label>
+      <channel>input</channel>
+      <description>Input labeled image with 0 for background and objects with l > 0</description>
+      <longflag>label</longflag>
+    </image>
+
+    <image>
+      <name>inputMaskFilename</name>
+      <label>Input mask image</label>
+      <channel>input</channel>
+      <description>Input mask image with 0 for background and 1 for region of interest</description>
+      <longflag>mask</longflag>
+    </image>
+
+    <boolean>
+      <name>lumFilter</name>
+      <label>Apply luminance filter transformation to input, i.e., the input is a .jpg</label>
+      <channel>input</channel>
+      <description>Set if input image in jpg format or png etc.</description>
+      <longflag>lumFilter</longflag>
+    </boolean>
+
+    <integer-vector>
+      <name>radiusVector</name>
+      <label>Radius of the neighborhood</label>
+      <channel>input</channel>
+      <description>The size of the neighborhood patch in the image to build the KD-tree and do the texture synthesis</description>
+      <longflag>radius</longflag>
+      <default>4,4,4</default>
+    </integer-vector>
+
+    <integer-vector>
+      <name>radiusMedian</name>
+      <label>Radius for the median filter (smoothing) that is applied at the end</label>
+      <channel>input</channel>
+      <description>The size of the neighborhood radius</description>
+      <longflag>radiusMedian</longflag>
+      <default>0,0,0</default>
+    </integer-vector>
+
+    <integer>
+      <name>maxSamples</name>
+      <label>Maximum number of random samples to averege during final stage</label>
+      <channel>input</channel>
+      <description>The maximum number of random samples per pixel to average for the final stage </description>
+      <longflag>maxSamples</longflag>
+      <default>2</default>
+    </integer>
+
+    <integer>
+      <name>distanceStep</name>
+      <label>Distance step</label>
+      <channel>input</channel>
+      <description>Step of algorithm moving inward during the filling process</description>
+      <longflag>distanceStep</longflag>
+      <default>2</default>
+    </integer>
+
+  </parameters>
+
+  <parameters>
+    <label>Ouput parameters</label>
+    <description>Output parameters</description>
+
+    <image>
+      <name>outputImageFilename</name>
+      <label>Output label image</label>
+      <channel>output</channel>
+      <description>Write the output of detected objects in the image</description>
+      <longflag>out</longflag>
+      <default>out.nrrd</default>
+    </image>
+
+  </parameters>
+</executable>
