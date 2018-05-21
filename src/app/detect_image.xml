@@ -13,14 +13,6 @@
     <description>Input parameters</description>
 
     <image>
-      <name>inputImageFilename</name>
-      <label>Input volume</label>
-      <channel>input</channel>
-      <description>Input image grayscale</description>
-      <longflag>img</longflag>
-    </image>
-
-    <image>
       <name>inputLabelFilename</name>
       <label>Input label image</label>
       <channel>input</channel>
@@ -28,22 +20,14 @@
       <longflag>label</longflag>
     </image>
 
-    <boolean>
-      <name>lumFilter</name>
-      <label>Apply luminance filter transformation to input, i.e., the input is a .jpg</label>
+    <integer-vector>
+      <name>radiusVector</name>
+      <label>Radius of the neighborhood</label>
       <channel>input</channel>
-      <description>Set if input image in jpg format or png etc.</description>
-      <longflag>lumFilter</longflag>
-    </boolean>
-
-    <integer>
-      <name>labelValue</name>
-      <label>Input label number</label>
-      <channel>input</channel>
-      <description>Number of label to use in the label image</description>
-      <longflag>labelValue</longflag>
-      <default>1</default>
-    </integer>
+      <description>The size of the neighborhood patch in the image to perform the fill</description>
+      <longflag>radius</longflag>
+      <default>8,8,8</default>
+    </integer-vector>
 
   </parameters>
 
@@ -55,9 +39,9 @@
       <name>outputFilename</name>
       <label>Output filename</label>
       <channel>output</channel>
-      <description>Write an output file with the statistics in json format</description>
+      <description>Write an output image</description>
       <longflag>out</longflag>
-      <default>out.json</default>
+      <default>out.nrrd</default>
     </string>
 
   </parameters>
