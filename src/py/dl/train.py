@@ -40,11 +40,12 @@ if(args.json):
   with open(args.json, "r") as f:
     obj = json.load(f)
 
-    tfrecords = obj['tfrecords']
+    tfrecords = os.path.join(os.path.dirname(args.json), obj["tfrecords"])
     image_shape = obj['image_shape']
     label_shape = obj['label_shape']
     
     tfrecords_arr.append(tfrecords)
+
 else:
   tfrecords_arr.append(args.tfrecords)
 
