@@ -36,9 +36,8 @@ def main(args):
 	img_shape = None
 
 	InputType = itk.Image[itk.SS,2]
-
-	if not os.path.exists(args.out):
-		os.makedirs(args.out)
+	
+	writer = tf.python_io.TFRecordWriter(args.out)
 
 	for fobj in filenames:
 		img_read = itk.ImageFileReader[InputType].New(FileName=fobj["img"])
@@ -46,22 +45,16 @@ def main(args):
 		img = img_read.GetOutput()
 		
 		img_np = itk.GetArrayViewFromImage(img)
-
-		image = itk.GetImageFromArray(img_np)
-
-		if(img_shape is None):
-			img_shape = img_np.shape
+		img_shape = img_np.shape
 
 		label_read = itk.ImageFileReader[InputType].New(FileName=fobj["label"])
 		label_read.Update()
 		label = label_read.GetOutput()
 
 		label_np = itk.GetArrayViewFromImage(label)
+		label_shape = label_np.shape
 		
 		print("Writing record", fobj)
-
-		tfrecords_filename = os.path.join(args.out, os.path.splitext(os.path.basename(fobj["img"]))[0] + ".tfrecords")
-		writer = tf.python_io.TFRecordWriter(tfrecords_filename)
 
 		example = tf.train.Example(features=tf.train.Features(feature={
 	        'image': _bytes_feature(img_np.tostring()),
@@ -70,13 +63,20 @@ def main(args):
 
 		writer.write(example.SerializeToString())
 
-		writer.close()
+	writer.close()
 
 	obj = {}
-	obj['shape'] = list(img_shape)
-	obj['tfrecords'] = tfrecords_filename
 
-	with open(args.out, "w") as f:
+
+	if(len(img_shape) == 2):
+		img_shape = img_shape + (1,)
+
+	obj['image_shape'] = img_shape
+	obj['label_shape'] = label_shape
+	obj['num_labels'] = args.num_labels
+	obj['tfrecords'] = os.path.basename(args.out)
+
+	with open(os.path.splitext(args.out)[0] + ".json", "w") as f:
 		f.write(json.dumps(obj))
 
 
@@ -88,10 +88,11 @@ if __name__ == "__main__":
 	in_group.add_argument('--csv', type=str, help='CSV file with two columns: img,label')
 
 	parser.add_argument('--label', type=str, help='Directory with nrrd images, same filename as in "img" directory to match corresponding pairs')
+	parser.add_argument('--num_labels', type=int, help='Maximum number of labels in label files', default=2)
 	parser.add_argument('--prefix', type=str, default="", help="Add a prefix to the label filename, seg_ or label_ for example")
 	parser.add_argument('--sufix', type=str, default="", help="Add a sufix to the label filename, _seg or _label for example")
 
-	parser.add_argument('--out', type=str, default="./out", help="Output directory for tfrecord files")
+	parser.add_argument('--out', type=str, default="./out.tfrecords", help="Output filename")
 
 	args = parser.parse_args()
 

@@ -17,7 +17,7 @@ parser = argparse.ArgumentParser(description='U network for segmentation', forma
 
 in_group = parser.add_mutually_exclusive_group(required=True)
   
-in_group.add_argument('--tfrecords', type=str, help='tfrecords directory')
+in_group.add_argument('--tfrecords', type=str, help='tfrecords filename')
 in_group.add_argument('--json', type=str, help='json file with obj {"shape": [], "tfrecords": "pathtofile"}')
 
 parser.add_argument('--shape', nargs='+', type=int, help='Shape for images in tfrecords')
@@ -28,20 +28,25 @@ parser.add_argument('--decay_rate', help='decay rate, default=0.96', type=float,
 parser.add_argument('--decay_steps', help='decay steps, default=10000', type=int, default=1000)
 parser.add_argument('--batch_size', help='Batch size for evaluation', type=int, default=16)
 parser.add_argument('--num_epochs', help='Number of epochs', type=int, default=10)
-parser.add_argument('--num_labels', help='Number of labels for the softmax output', type=int, default=1)
+parser.add_argument('--num_labels', help='Number of labels for the softmax output', type=int, default=2)
 parser.add_argument('--ps_device', help='Process device', type=str, default='/cpu:0')
 parser.add_argument('--w_device', help='Worker device', type=str, default='/cpu:0')
 
 args = parser.parse_args()
 
+tfrecords_arr = []
+
 if(args.json):
   with open(args.json, "r") as f:
     obj = json.load(f)
-    tfrecords = obj["tfrecords"]
+
+    tfrecords = obj['tfrecords']
+    image_shape = obj['image_shape']
+    label_shape = obj['label_shape']
+    
+    tfrecords_arr.append(tfrecords)
 else:
-  tfrecords = []
-  for img in glob.iglob(os.path.join(args.tfrecords, '**/*.tfrecord'), recursive=True):
-    tfrecords.append(img)
+  tfrecords_arr.append(args.tfrecords)
 
 outvariablesdirname = args.out
 modelname = args.model
@@ -90,15 +95,18 @@ with graph.as_default():
   # x = tf.placeholder(tf.float32,shape=(None, size_features))
   # y_ = tf.placeholder(tf.float32, shape=(None, num_labels))
 
-  x, y_ = nn.inputs(batch_size=batch_size,
+  iterator = nn.inputs(batch_size=batch_size,
     num_epochs=num_epochs,
-    filenames=tfrecords,
-    num_labels=num_labels)
+    filenames=tfrecords_arr)
 
+  images, labels = iterator.get_next()
+
+  x = tf.reshape(images, (-1,) + tuple(image_shape))
+  y_ = tf.one_hot(tf.reshape(labels, (-1,) + tuple(label_shape)), num_labels)
   
   keep_prob = tf.placeholder(tf.float32)
 
-  y_conv = nn.inference(x, num_labels=num_labels, keep_prob=keep_prob, batch_size=batch_size, is_training=True, ps_device=ps_device, w_device=w_device)
+  y_conv = nn.inference(x, num_labels=num_labels, keep_prob=keep_prob, is_training=True, ps_device=ps_device, w_device=w_device)
 
   # calculate the loss from the results of inference and the labels
   loss = nn.loss(y_conv, y_)
@@ -126,6 +134,7 @@ with graph.as_default():
   summary_op = tf.summary.merge_all()
 
   with tf.Session() as sess:
+
     sess.run([tf.global_variables_initializer(), tf.local_variables_initializer()])
     saver = tf.train.Saver()
     # specify where to write the log files for import to TensorBoard
@@ -138,9 +147,7 @@ with graph.as_default():
     while True:
       try:
 
-        batch_data, batch_labels = sess.run([next_train_data, next_train_labels])
-
-        _, loss_value, summary, accuracy, auc = sess.run([train_step, loss, summary_op, accuracy_eval, auc_eval], feed_dict={x: batch_data, y_: batch_labels, keep_prob: 0.5})
+        _, loss_value, summary, accuracy, auc = sess.run([train_step, loss, summary_op, accuracy_eval, auc_eval], feed_dict={keep_prob: 0.5})
 
         if step % 100 == 0:
           print('OUTPUT: Step %d: loss = %.3f' % (step, loss_value))
