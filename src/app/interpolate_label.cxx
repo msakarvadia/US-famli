@@ -1,5 +1,5 @@
 
-#include "detect_imageCLP.h"
+#include "interpolate_labelCLP.h"
 
 #include <itkImage.h>
 #include <itkImageFileReader.h>
