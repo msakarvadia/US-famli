@@ -80,6 +80,15 @@
       <default>2</default>
     </integer>
 
+    <double>
+      <name>weightEdgeFilter</name>
+      <label>Weight for the edge filter, this helps preserve edges</label>
+      <channel>input</channel>
+      <description>Weight of the edge filter during optimization</description>
+      <longflag>weightEdge</longflag>
+      <default>0</default>
+    </double>
+
   </parameters>
 
   <parameters>

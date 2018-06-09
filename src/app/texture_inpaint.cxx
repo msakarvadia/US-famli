@@ -368,7 +368,7 @@ int main (int argc, char * argv[]){
                 double distance = fabs(distance_v[0]) + 0.0001;
 
                 if(edge_weights.size() < neighbors[0]){
-                    distance += 100*edge_weights[neighbors[0]];
+                    distance += weightEdgeFilter*edge_weights[neighbors[0]];
                 }
 
                 for(int i = 0; i < itout.Size(); i++){
