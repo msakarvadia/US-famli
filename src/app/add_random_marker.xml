@@ -1,11 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <executable>
-  <category>Detection</category>
-  <title>Find structure in image</title>
+  <category>Add noise</category>
+  <title>Add some noise to the image, a.k.a., the useless caliphers in the US images</title>
   <version>1.0.0</version>
-  <description>
-    find the structuring element in the image
-  </description>
+  <description>Add some caliphers randomly to the image</description>
   <contributor>Juan Carlos Prieto</contributor>
 
   <parameters>
@@ -28,12 +26,48 @@
       <longflag>label</longflag>
     </image>
 
+    <image>
+      <name>inputMaskFilename</name>
+      <label>Input mask image</label>
+      <channel>input</channel>
+      <description>Input mask image with 0 for background and objects with p > 0, only set values in this region</description>
+      <longflag>mask</longflag>
+    </image>
+
+    <integer>
+      <name>numSamples</name>
+      <label>Number of samples</label>
+      <channel>input</channel>
+      <description>Number of samples of labeled objects to add</description>
+      <longflag>samples</longflag>
+      <default>20</default>
+    </integer>
+
+    <integer>
+      <name>numSamplesCross</name>
+      <label>Number of samples, in cross shape</label>
+      <channel>input</channel>
+      <description>Number of samples in a cross shape</description>
+      <longflag>samplesCross</longflag>
+      <default>50</default>
+    </integer>
+
+    <integer>
+      <name>numSamplesCrossBig</name>
+      <label>Number of samples, in cross shape (big one)</label>
+      <channel>input</channel>
+      <description>Number of samples in a cross shape but big</description>
+      <longflag>samplesCrossBig</longflag>
+      <default>50</default>
+    </integer>
+
     <boolean>
       <name>lumFilter</name>
       <label>Apply luminance filter transformation to input, i.e., the input is a .jpg</label>
       <channel>input</channel>
       <description>Set if input image in jpg format or png etc.</description>
       <longflag>lumFilter</longflag>
+      <default>0</default>
     </boolean>
 
   </parameters>

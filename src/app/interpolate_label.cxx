@@ -136,7 +136,12 @@ int main (int argc, char * argv[]){
                         if(itout.InBounds()){
 
                             for(int i = 0; i < itout.Size(); i++){
-                                itout.SetPixel(i, *liit);
+                                if(labelValue == -1){
+                                    itout.SetPixel(i, *liit);
+                                }else{
+                                    itout.SetPixel(i, labelValue);
+                                }
+                                
                             }
                         }
 

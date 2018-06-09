@@ -19,6 +19,9 @@
 #include <itkImageDuplicator.h>
 #include <itkMedianImageFilter.h>
 
+#include "itkSobelEdgeDetectionImageFilter.h"
+#include "itkRescaleIntensityImageFilter.h"
+
 #include <itkBinaryDilateImageFilter.h>
 #include <itkBinaryBallStructuringElement.h>
 
@@ -167,6 +170,23 @@ int main (int argc, char * argv[]){
     CNNImageNeighborhoodIteratorType itcnndist(radius, cnndistimage, cnndistimage->GetLargestPossibleRegion());
     InputImageNeighborhoodIteratorType itcount(radius, countimg, countimg->GetLargestPossibleRegion());
 
+    cout<<"Edge image for weights"<<endl;
+
+    typedef itk::Image<double, dimension>          DoubleImageType;
+    
+    typedef itk::SobelEdgeDetectionImageFilter <InputImageType, DoubleImageType> SobelEdgeDetectionImageFilterType;
+    SobelEdgeDetectionImageFilterType::Pointer sobelFilter = SobelEdgeDetectionImageFilterType::New();
+    sobelFilter->SetInput(imgin);
+
+    typedef itk::RescaleIntensityImageFilter< DoubleImageType, DoubleImageType > RescaleFilterType;
+    RescaleFilterType::Pointer rescaleFilter = RescaleFilterType::New();
+    rescaleFilter->SetInput(sobelFilter->GetOutput());
+    rescaleFilter->SetOutputMinimum(0.0);
+    rescaleFilter->SetOutputMaximum(1.0);
+    rescaleFilter->Update();
+
+    DoubleImageType::Pointer edge_image = rescaleFilter->GetOutput();
+
     cout<<"Building kdtree..."<<endl;
 
     typedef itk::VariableLengthVector< float > MeasurementVectorType;
@@ -180,6 +200,8 @@ int main (int argc, char * argv[]){
     itout.GoToBegin();
 
     MeasurementVectorType mv(vectsize);
+    
+    std::vector<double> edge_weights;
     
     while(!it.IsAtEnd() && !itlb.IsAtEnd() && !itout.IsAtEnd()){
         bool mask = true;
@@ -198,6 +220,7 @@ int main (int argc, char * argv[]){
             }
             if(addvector){
                 sample->PushBack( mv );
+                edge_weights.push_back(edge_image->GetPixel(it.GetIndex()));
             }        
         }
 
@@ -327,8 +350,8 @@ int main (int argc, char * argv[]){
                             mean = meanvect.sum()/meanvect.size();
                         }
 
-                        for(int i = 0; i < meanvect.size(); i++){
-                            stdev += pow(meanvect[i] - mean, 2);
+                        for(int ii = 0; ii < meanvect.size(); ii++){
+                            stdev += pow(meanvect[ii] - mean, 2);
                         }
                         if(meanvect.size() > 0){
                             stdev = sqrt(stdev / meanvect.size());
@@ -343,6 +366,10 @@ int main (int argc, char * argv[]){
                 tree->Search( mv, numberOfNeighbors, neighbors, distance_v);
                 MeasurementVectorType mv_n = tree->GetMeasurementVector( neighbors[0] );
                 double distance = fabs(distance_v[0]) + 0.0001;
+
+                if(edge_weights.size() < neighbors[0]){
+                    distance += 100*edge_weights[neighbors[0]];
+                }
 
                 for(int i = 0; i < itout.Size(); i++){
                     if(itlb.GetPixel(i) != 0){
@@ -414,6 +441,7 @@ int main (int argc, char * argv[]){
     itcnn.GoToBegin();
     itcnndist.GoToBegin();
     itcount.GoToBegin();
+    itdist.GoToBegin();
     itout.GoToBegin();
 
     countimg->FillBuffer(0);
@@ -431,8 +459,9 @@ int main (int argc, char * argv[]){
     while(!itoutrand.IsAtEnd()){
         
         itcount.SetLocation(itoutrand.GetIndex());
+        itdist.SetLocation(itoutrand.GetIndex());
 
-        if(itcount.InBounds() && itcount.GetCenterPixel() <= max_samples){
+        if(itcount.InBounds() && itcount.GetCenterPixel() <= max_samples && itdist.GetCenterPixel() >= 0){
             
             itout.SetLocation(itcount.GetIndex());
             itcnn.SetLocation(itcount.GetIndex());
@@ -449,6 +478,10 @@ int main (int argc, char * argv[]){
             tree->Search( mv, numberOfNeighbors, neighbors, distance_v);
             MeasurementVectorType mv_n = tree->GetMeasurementVector( neighbors[0] );
             double distance = fabs(distance_v[0]) + 0.0001;
+
+            if(edge_weights.size() < neighbors[0]){
+                distance += weightEdgeFilter*edge_weights[neighbors[0]];
+            }
 
             for(int i = 0; i < itout.Size(); i++){
                 if(labelimage->GetPixel(itcount.GetIndex(i)) != 0 && itcount.GetPixel(i) <= max_samples){
