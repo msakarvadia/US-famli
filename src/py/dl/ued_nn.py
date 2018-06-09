@@ -11,23 +11,23 @@ import glob
 class ReadAndDecode:
 
     image_shape = None
-    label_shape = None
+    image1_shape = None
 
     def read_and_decode(self, record):
 
         keys_to_features = {
           "image": tf.FixedLenFeature((np.prod(self.image_shape)), tf.float32),
-          "label": tf.FixedLenFeature((np.prod(self.label_shape)), tf.int64)
+          "image1": tf.FixedLenFeature((np.prod(self.image1_shape)), tf.float32)
         }
         parsed = tf.parse_single_example(record, keys_to_features)
         
         image = parsed["image"]
-        label = tf.cast(parsed["label"], tf.int32)
+        image1 = parsed["image1"]
 
         image = tf.reshape(image, self.image_shape)
-        label = tf.reshape(label, self.label_shape)
+        image1 = tf.reshape(image1, self.image1_shape)
 
-        return image, label
+        return image, image1
 
 
 def inputs(json_filename, batch_size=1, num_epochs=1):
@@ -43,8 +43,7 @@ def inputs(json_filename, batch_size=1, num_epochs=1):
           tfrecords_arr.append(tfr)
 
         r_a_d.image_shape = obj['image_shape']
-        r_a_d.label_shape = obj['label_shape']
-        r_a_d.num_labels = obj['label_shape']
+        r_a_d.image1_shape = obj['image1_shape']
 
     dataset = tf.data.TFRecordDataset(tfrecords_arr)
     
@@ -179,7 +178,7 @@ def matmul(x, out_channels, name='matmul', activation=tf.nn.relu, ps_device="/cp
 
         return matmul_op
 
-def inference(images, keep_prob=1, is_training=False, ps_device="/cpu:0", w_device="/gpu:0"):
+def inference(images, num_labels=2, keep_prob=1, is_training=False, ps_device="/cpu:0", w_device="/gpu:0"):
 
 #   input: tensor of images
 #   output: tensor of computed logits
@@ -232,29 +231,26 @@ def inference(images, keep_prob=1, is_training=False, ps_device="/cpu:0", w_devi
     conv7_0 = convolution2d(concat7_0, name="conv7_0_op", filter_shape=[5, 5, 16, 8], strides=[1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
     conv7_1 = convolution2d(conv7_0, name="conv7_1_op", filter_shape=[5, 5, 8, 8], strides=[1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
 
-    final = convolution2d(conv7_1, name="final", filter_shape=[1, 1, 8, 1], strides=[1,1,1,1], padding="SAME", activation=tf.nn.sigmoid, ps_device=ps_device, w_device=w_device)
+    final = convolution2d(conv7_1, name="final", filter_shape=[1, 1, 8, 1], strides=[1,1,1,1], padding="SAME", activation=None, ps_device=ps_device, w_device=w_device)
 
     return final
 
-def metrics(logits, labels, name="metrics"):
+def metrics(logits, labels, name='collection_metrics'):
 
     with tf.variable_scope(name):
         weight_map = None
 
         metrics_obj = {}
-
-        metrics_obj["ACCURACY"] = tf.metrics.accuracy(predictions=logits, labels=labels, weights=weight_map, name='accuracy')
-        metrics_obj["AUC"] = tf.metrics.auc(predictions=logits, labels=labels, weights=weight_map, name='auc')
-        metrics_obj["FN"] = tf.metrics.false_negatives(predictions=logits, labels=labels, weights=weight_map, name='false_negatives')
-        metrics_obj["FP"] = tf.metrics.false_positives(predictions=logits, labels=labels, weights=weight_map, name='false_positives')
-        metrics_obj["TN"] = tf.metrics.true_negatives(predictions=logits, labels=labels, weights=weight_map, name='true_negatives')
-        metrics_obj["TP"] = tf.metrics.true_positives(predictions=logits, labels=labels, weights=weight_map, name='true_positives')
+        
+        metrics_obj["MEAN_ABSOLUTE_ERROR"] = tf.metrics.mean_absolute_error(predictions=logits, labels=labels, weights=weight_map, name='mean_absolute_error')
+        metrics_obj["MEAN_SQUARED_ERROR"] = tf.metrics.mean_squared_error(predictions=logits, labels=labels, weights=weight_map, name='mean_squared_error')
+        metrics_obj["ROOT_MEAN_SQUARED_ERROR"] = tf.metrics.root_mean_squared_error(predictions=logits, labels=labels, weights=weight_map, name='root_mean_squared_error')
+        
         
         for key in metrics_obj:
             tf.summary.scalar(key, metrics_obj[key][0])
 
         return metrics_obj
-        
 
 
 def training(loss, learning_rate, decay_steps, decay_rate):
@@ -279,7 +275,7 @@ def training(loss, learning_rate, decay_steps, decay_rate):
 
     return train_op
 
-def loss(logits, labels, images=None, class_weights=None):
+def loss(logits, labels, class_weights=None):
     
     print_tensor_shape( logits, 'logits shape')
     print_tensor_shape( labels, 'labels shape')
@@ -288,9 +284,6 @@ def loss(logits, labels, images=None, class_weights=None):
     batch_size = shape[0]
 
     logits_flat = tf.reshape(logits, [batch_size, -1])
-    labels_flat = tf.reshape(tf.cast(labels, tf.float32), [batch_size, -1])
+    labels_flat = tf.reshape(labels, [batch_size, -1])
 
-    intersection = 2.0 * tf.reduce_sum(logits_flat * labels_flat, axis=1) + 1e-7
-    denominator = tf.reduce_sum(logits_flat, axis=1) + tf.reduce_sum(labels_flat, axis=1) + 1e-7
-
-    return 1.0 - tf.reduce_mean(intersection / denominator)
+    return tf.losses.absolute_difference(predictions=logits_flat, labels=labels_flat)
