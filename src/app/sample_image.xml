@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<executable>
+  <category>PROJECT</category>
+  <title>extractMSLesion</title>
+  <version>1.0</version>
+  <contributor>Juan Carlos Prieto</contributor>
+  <parameters>        
+    <label>Input parameters</label>
+    <description>Input parameters</description>
+
+    <image multiple="true">
+      <name>vectorImageFilename</name>      
+      <longflag>img</longflag>
+      <description>Input images with 1 scalar value, all the input images should be in the same space (registered). This filter requires at least one image</description>
+    </image>
+
+    <image>
+      <name>labelImageFilename</name>      
+      <longflag>labelImg</longflag>
+      <description>Label image filename (optional)</description>
+    </image>
+
+    <image>
+      <name>maskImageFilename</name>      
+      <longflag>maskImg</longflag>
+      <description>Mask image filename (optional)</description>
+    </image>
+
+    <integer>
+      <name>labelValueContains</name>
+      <longflag>labelValueContains</longflag>
+      <default>-1</default>
+      <description>Input label value, the region or label set in labelValue must be in proximity to this label</description>
+    </integer>
+
+    <integer>
+      <name>numberOfSamples</name>
+      <longflag>numberOfSamples</longflag>
+      <default>-1</default>
+      <description>Set the number of samples to be extracted from the image, -1 for all</description>
+    </integer>
+
+    <double>
+      <name>labelValueContainsPercentageMax</name>
+      <longflag>labelValueContainsPercentageMax</longflag>
+      <description>Amount or ratio of labelValueContains in the region [0-1]</description>
+      <default>0</default>
+      <constraints>
+        <minimum>0</minimum>
+        <maximum>1</maximum>
+      </constraints>
+    </double>
+
+    <integer-vector>
+      <name>neighborhood</name>
+      <longflag>--neighborhood</longflag>
+      <description>The size of the neighborhood in each dimension</description>
+      <label>Neighborhood Size</label>
+      <default>5,5,5</default>
+    </integer-vector>
+
+    <boolean>
+      <name>composeImages</name>
+      <longflag>composeImages</longflag>
+      <default>0</default>
+      <description>Create a vector image as output</description>
+    </boolean>
+    
+  </parameters>
+
+  <parameters>
+    <label>Ouput parameters</label>
+    <description>Output parameters</description>
+
+    <file>
+      <name>outputImageDirectory</name>      
+      <longflag>outDir</longflag>
+    </file>
+
+  </parameters>
+</executable>
