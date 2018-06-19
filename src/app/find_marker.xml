@@ -28,6 +28,14 @@
       <longflag>label</longflag>
     </image>
 
+    <image>
+      <name>inputMaskFilename</name>
+      <label>Input mask image</label>
+      <channel>input</channel>
+      <description>Input masked image with 0 for background and objects with p > 0, only work over this area</description>
+      <longflag>mask</longflag>
+    </image>
+
     <boolean>
       <name>lumFilter</name>
       <label>Apply luminance filter transformation to input, i.e., the input is a .jpg</label>

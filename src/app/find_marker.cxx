@@ -23,9 +23,8 @@ int main (int argc, char * argv[]){
     }
 
     cout << "The input image is: " << inputImageFilename << endl;
-    if(inputLabelFilename.compare("") != 0){
-        cout << "The input label image is: " << inputLabelFilename << endl;
-    }
+    cout << "The input label image is: " << inputLabelFilename << endl;
+    
 
     //Read Image
     typedef unsigned char InputPixelType;
@@ -75,6 +74,15 @@ int main (int argc, char * argv[]){
     readerlm->SetFileName(inputLabelFilename);
     readerlm->Update();
     InputLabelImagePointerType labelimage = readerlm->GetOutput();
+    
+    InputLabelImagePointerType maskimage = 0;
+
+    if(inputMaskFilename.compare("") != 0){
+        InputImageLabelFileReaderPointerType readermask = InputLabelImageFileReaderType::New();
+        readermask->SetFileName(inputMaskFilename);
+        readermask->Update();
+        maskimage = readermask->GetOutput();
+    }
 
     InputLabelImagePointerType outputimg = InputLabelImageType::New();
     outputimg->SetRegions(imgin->GetLargestPossibleRegion());
@@ -124,7 +132,7 @@ int main (int argc, char * argv[]){
     lbout.GoToBegin();
 
     while(!it.IsAtEnd()){
-        if(it.InBounds()){
+        if( it.InBounds() && (!maskimage|| (maskimage && maskimage->GetPixel(it.GetIndex()) != 0)) ){
             double background = 0;
             double foreground = 0;
             for(int i = 0; i < it.Size(); i++){
