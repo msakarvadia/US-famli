@@ -86,7 +86,7 @@ with graph.as_default():
     saver = tf.train.Saver()
     # specify where to write the log files for import to TensorBoard
     now = datetime.now()
-    summary_writer = tf.summary.FileWriter(os.path.join(outvariablesdirname, now.strftime("%Y%m%d-%H%M%S")), sess.graph)
+    summary_writer = tf.summary.FileWriter(os.path.join(outvariablesdirname, modelname + "-" + now.strftime("%Y%m%d-%H%M%S")), sess.graph)
 
     sess.run([iterator.initializer])
     step = 0

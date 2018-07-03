@@ -5,8 +5,10 @@ import glob
 import numpy as np
 import tensorflow as tf
 #import matplotlib.pyplot as plt
+import sys
 import json
 import csv
+import uuid
 
 def _int64_feature(value):
 	if not isinstance(value, list):
@@ -19,122 +21,127 @@ def _float_feature(value):
 	return tf.train.Feature(float_list=tf.train.FloatList(value=value))
 
 def _bytes_feature(value):
+	if not isinstance(value, list):
+		value = [value]
 	return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
 
 def main(args):
 	
-	filenames = []
+	csv_rows = []
 
-	if(args.img):
-
-		for img in glob.iglob(os.path.join(args.img, '**/*.nrrd'), recursive=True):
-			fobj = {}
-			fobj["img"] = img
-
-			if(args.label):
-				labeldir = args.label
-				fobj["label"] = os.path.join(labeldir, args.prefix + os.path.splitext(os.path.basename(img))[0] + args.sufix + ".nrrd")
-
-			if(args.img1):
-				img1dir = args.img1
-				fobj["image1"] = os.path.join(img1dir, args.prefix + os.path.splitext(os.path.basename(img))[0] + args.sufix + ".nrrd")
-
-			filenames.append(fobj)
-
-	elif(args.csv):
-
-		with open(args.csv) as csvfile:
-			for row in csv.DictReader(csvfile):
-				filenames.append(row)
-
-	img_shape = None
-	label_shape = None
-	img1_shape = None
-	InputType = itk.Image[itk.SS,2]
+	with open(args.csv) as csvfile:
+		for row in csv.DictReader(csvfile):
+			csv_rows.append(row)
 
 	if(not os.path.exists(args.out) or not os.path.isdir(args.out)):
 		os.makedirs(args.out)
 
-	for fobj in filenames:
+	obj = {}
+	obj["image_keys"] = []
 
+	for fobj in csv_rows:
+
+		row_keys = list(fobj.keys())
+		if("tfRecord" in row_keys):
+			row_keys.remove("tfRecord")
+		
 		feature = {}
 
-		img_read = itk.ImageFileReader[InputType].New(FileName=fobj["img"])
-		img_read.Update()
-		img = img_read.GetOutput()
+		try:
+
+			for key in row_keys:
+
+				if(os.path.exists(fobj[key])):
+
+					if(not key in obj["image_keys"]):
+						obj["image_keys"].append(key)
+
+					img_read = itk.ImageFileReader.New(FileName=fobj[key])
+					img_read.Update()
+					img = img_read.GetOutput()
+					
+					img_np = itk.GetArrayViewFromImage(img).astype(float)
+					feature[key] =  _float_feature(img_np.reshape(-1).tolist())
+
+					shape_key = str(key) + "_shape"
+
+					if(not shape_key in obj):
+						# Put the shape of the image in the json object if it does not exists. This is done for global information
+						img_shape = list(img_np.shape)
+
+						if(img_shape[0] == 1):
+							# If the first component is 1 we remove it. It means that is a 2D image but was saved as 3D
+							img_shape = img_shape[1:]
+
+						if(img.GetNumberOfComponentsPerPixel() == 1):
+							img_shape = img_shape + [1]
+
+						obj[shape_key] = img_shape
+
+					max_key = str(key) + "_max"
+					min_key = str(key) + "_min"
+
+					if(not max_key in obj or not min_key in obj):
+						obj[max_key] = np.max(img_np)
+						obj[min_key] = np.min(img_np)
+					else:
+						obj[max_key] = max(obj[max_key], np.max(img_np))
+						obj[min_key] = min(obj[min_key], np.min(img_np))
+
+				else:
+					try:
+						# Try converting the data to int, if it is a float it will fail
+						feature[key] = _int64_feature(int(fobj[key]))
+					except:
+						try:
+							# If the previous failed, try converting it to float
+							feature[key] = _float_feature(float(fobj[key]))
+						except:
+							# If it fails the try saving it as a bytes feature
+							feature[key] = _bytes_feature(int(fobj[key]))
 		
-		img_np = itk.GetArrayViewFromImage(img).astype(float)
-		img_shape = img_np.shape
+			if("tfRecord" in fobj):
+				record_path = fobj["tfRecord"]
+			else:
+				record_path = os.path.join(args.out, str(uuid.uuid4()) + ".tfrecord")
 
-		feature['image'] =  _float_feature(img_np.reshape(-1).tolist())
+			fobj["tfRecord"] = record_path
 
-		if("label" in fobj):
-			label_read = itk.ImageFileReader[InputType].New(FileName=fobj["label"])
-			label_read.Update()
-			label = label_read.GetOutput()
-			label_np = itk.GetArrayViewFromImage(label).astype(int)
-			label_shape = label_np.shape
+			writer = tf.python_io.TFRecordWriter(record_path)
+			example = tf.train.Example(features=tf.train.Features(feature=feature))
 
-			feature['label'] = _int64_feature(label_np.reshape(-1).tolist())
+			print("Writing record", fobj)
 
-		if("img1" in fobj):
-			img1_read = itk.ImageFileReader[InputType].New(FileName=fobj["img1"])
-			img1_read.Update()
-			img1 = img1_read.GetOutput()
-			img1_np = itk.GetArrayViewFromImage(img1).astype(float)
-			img1_shape = img1_np.shape
+			writer.write(example.SerializeToString())
+			writer.close()
 
-			feature['image1'] = _float_feature(img1_np.reshape(-1).tolist())
-		
-		record_path = os.path.join(args.out, os.path.splitext(os.path.basename(fobj["img"]))[0] + ".tfrecord")
-		print("Writing record", fobj, record_path)
+		except Exception as e:
+			print("Error converting to tfRecord", obj, e, file=sys.stderr)
+			print("I'll keep on going...")
 
-		writer = tf.python_io.TFRecordWriter(record_path)
-
-		example = tf.train.Example(features=tf.train.Features(feature=feature))
-
-		writer.write(example.SerializeToString())
-
-		writer.close()
-
-	obj = {}
-
-
-	if(len(img_shape) == 2):
-		img_shape = img_shape + (1,)
-
-	obj['image_shape'] = img_shape
-	if(label_shape is not None):
-		obj['label_shape'] = label_shape
-		obj['num_labels'] = args.num_labels
-
-	if(img1_shape is not None):
-		obj['image1_shape'] = img1_shape
+	obj['tfrecords'] = os.path.basename(args.out.rstrip(os.sep))
 	
-	obj['tfrecords'] = os.path.basename(args.out)
-
 	outjson = args.out.rstrip(os.sep) + ".json"
 	print("Writing:", outjson)
 	with open(outjson, "w") as f:
 		f.write(json.dumps(obj))
-
+	
+	if(len(csv_rows) > 0):
+		outcsv = os.path.splitext(args.csv)[0] + "_tfRecords.csv"
+		print("Writing:", outcsv)
+		csv_headers = list(csv_rows[0].keys())
+		with open(outcsv, "w") as f:
+			writer = csv.DictWriter(f, fieldnames=csv_headers)
+			writer.writeheader()
+			for row in csv_rows:
+				writer.writerow(row)
 
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser()
-	in_group = parser.add_mutually_exclusive_group(required=True)
 	
-	in_group.add_argument('--img', type=str, help='Directory with nrrd images, image has <imagename>.nrrd. All images must have the same dimensions!.')
-	in_group.add_argument('--csv', type=str, help='CSV file with columns, a row has matching pairs to save in tfrecords, columns must be img,label,img1. img is required, label or img1 are optional.')
-
-	parser.add_argument('--label', type=str, help='Directory with nrrd images, same filename as in "img" directory to match corresponding pairs, saved in tfRecord as type int')
-	parser.add_argument('--num_labels', type=int, help='Maximum number of labels in label files', default=2)
-
-	parser.add_argument('--img1', type=str, help='Directory with nrrd images, same filename as in "img" directory to match corresponding pairs, saved in tfRecords as type float')
-	
-	parser.add_argument('--prefix', type=str, default="", help="Add a prefix to the label/img1 filename, seg_ or label_ for example")
-	parser.add_argument('--sufix', type=str, default="", help="Add a sufix to the label/img1 filename, _seg or _label for example")
-
+	parser.add_argument('--csv', type=str, help='CSV file with dataset information, a row may contain image filenames to save in tfrecords. The column name is used as key to store in tfRecord format. The maximum pixel value for each image column is written to the json file as well as the shape of the first image found.')
 	parser.add_argument('--out', type=str, default="./out", help="Output directory")
+	parser.add_argument('--resize', type=int, default=None, nargs='+', help="Resize all images. The number of channels is kept the same.")
 
 	args = parser.parse_args()
 

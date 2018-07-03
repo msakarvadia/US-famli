@@ -10,40 +10,46 @@ import glob
 
 class ReadAndDecode:
 
-    image_shape = None
-    image1_shape = None
+    def __init__(self):
+        self.data_description = {}
+        self.keys_to_features = {}
+
+    def set_data_description(self, data_description):
+        self.data_description = data_description
+
+        self.keys_to_features = {}
+
+        if("image_keys" in self.data_description):
+
+            for img_key in self.data_description["image_keys"]:
+                self.keys_to_features[img_key] = tf.FixedLenFeature((np.prod(self.data_description[img_key + "_shape"])), tf.float32)
+
+        else:
+            print("Nothing to decode! image_keys missing in object description object. tfRecords.py creates this descriptor.")
+            raise
 
     def read_and_decode(self, record):
 
-        keys_to_features = {
-          "image": tf.FixedLenFeature((np.prod(self.image_shape)), tf.float32),
-          "image1": tf.FixedLenFeature((np.prod(self.image1_shape)), tf.float32)
-        }
-        parsed = tf.parse_single_example(record, keys_to_features)
-        
-        image = parsed["image"]
-        image1 = parsed["image1"]
+        parsed = tf.parse_single_example(record, self.keys_to_features)
+        reshaped_parsed = {}
 
-        image = tf.reshape(image, self.image_shape)
-        image1 = tf.reshape(image1, self.image1_shape)
+        for img_key in self.data_description["image_keys"]:
+            reshaped_parsed[img_key] = tf.reshape(parsed[img_key], self.data_description[img_key + "_shape"])
 
-        return image, image1
-
+        return reshaped_parsed["image"], reshaped_parsed["image1"]
 
 def inputs(json_filename, batch_size=1, num_epochs=1):
 
-    r_a_d = ReadAndDecode()
-
     with open(json_filename, "r") as f:
         obj = json.load(f)
+
+        r_a_d = ReadAndDecode()
+        r_a_d.set_data_description(obj)
 
         tfrecords_arr = []
         tfrecords_dir = os.path.join(os.path.dirname(json_filename), obj["tfrecords"], '**/*.tfrecord')
         for tfr in glob.iglob(tfrecords_dir, recursive=True):
           tfrecords_arr.append(tfr)
-
-        r_a_d.image_shape = obj['image_shape']
-        r_a_d.image1_shape = obj['image1_shape']
 
     dataset = tf.data.TFRecordDataset(tfrecords_arr)
     

@@ -85,7 +85,7 @@ with graph.as_default():
   
   keep_prob = tf.placeholder(tf.float32)
 
-  y_conv = nn.inference(x, num_labels=num_labels, keep_prob=1.0, is_training=False, ps_device=ps_device, w_device=w_device)
+  y_conv = nn.inference(x, keep_prob=1.0, is_training=False, ps_device=ps_device, w_device=w_device)
   label = y_conv
 
   with tf.Session() as sess:

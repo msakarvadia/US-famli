@@ -85,14 +85,5 @@
       <default>out.nrrd</default>
     </image>
 
-    <image>
-      <name>outputLabelFilename</name>
-      <label>Output label image</label>
-      <channel>output</channel>
-      <description>Write a labeled image with the location of the output markers</description>
-      <longflag>out</longflag>
-      <default>outLabel.nrrd</default>
-    </image>
-
   </parameters>
 </executable>
