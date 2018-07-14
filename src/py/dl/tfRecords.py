@@ -139,9 +139,8 @@ def main(args):
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser()
 	
-	parser.add_argument('--csv', type=str, help='CSV file with dataset information, a row may contain image filenames to save in tfrecords. The column name is used as key to store in tfRecord format. The maximum pixel value for each image column is written to the json file as well as the shape of the first image found.')
+	parser.add_argument('--csv', type=str, help='CSV file with dataset information, a row may contain image filenames to save in tfrecords. The column name is used as key to store in tfRecord format. The maximum pixel value for each image column is written to the json file as well as the shape of the first image found.', required=True)
 	parser.add_argument('--out', type=str, default="./out", help="Output directory")
-	parser.add_argument('--resize', type=int, default=None, nargs='+', help="Resize all images. The number of channels is kept the same.")
 
 	args = parser.parse_args()
 

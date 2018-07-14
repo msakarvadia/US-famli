@@ -10,40 +10,46 @@ import glob
 
 class ReadAndDecode:
 
-    image_shape = None
-    image1_shape = None
+    def __init__(self):
+        self.data_description = {}
+        self.keys_to_features = {}
+
+    def set_data_description(self, data_description):
+        self.data_description = data_description
+
+        self.keys_to_features = {}
+
+        if("image_keys" in self.data_description):
+
+            for img_key in self.data_description["image_keys"]:
+                self.keys_to_features[img_key] = tf.FixedLenFeature((np.prod(self.data_description[img_key + "_shape"])), tf.float32)
+
+        else:
+            print("Nothing to decode! image_keys missing in object description object. tfRecords.py creates this descriptor.")
+            raise
 
     def read_and_decode(self, record):
 
-        keys_to_features = {
-          "image": tf.FixedLenFeature((np.prod(self.image_shape)), tf.float32),
-          "image1": tf.FixedLenFeature((np.prod(self.image1_shape)), tf.float32)
-        }
-        parsed = tf.parse_single_example(record, keys_to_features)
-        
-        image = parsed["image"]
-        image1 = parsed["image1"]
+        parsed = tf.parse_single_example(record, self.keys_to_features)
+        reshaped_parsed = {}
 
-        image = tf.reshape(image, self.image_shape)
-        image1 = tf.reshape(image1, self.image1_shape)
+        for img_key in self.data_description["image_keys"]:
+            reshaped_parsed[img_key] = tf.reshape(parsed[img_key], self.data_description[img_key + "_shape"])
 
-        return image, image1
-
+        return reshaped_parsed["image"], reshaped_parsed["image1"]
 
 def inputs(json_filename, batch_size=1, num_epochs=1):
 
-    r_a_d = ReadAndDecode()
-
     with open(json_filename, "r") as f:
         obj = json.load(f)
+
+        r_a_d = ReadAndDecode()
+        r_a_d.set_data_description(obj)
 
         tfrecords_arr = []
         tfrecords_dir = os.path.join(os.path.dirname(json_filename), obj["tfrecords"], '**/*.tfrecord')
         for tfr in glob.iglob(tfrecords_dir, recursive=True):
           tfrecords_arr.append(tfr)
-
-        r_a_d.image_shape = obj['image_shape']
-        r_a_d.image1_shape = obj['image1_shape']
 
     dataset = tf.data.TFRecordDataset(tfrecords_arr)
     
@@ -190,50 +196,76 @@ def inference(images, num_labels=2, keep_prob=1, is_training=False, ps_device="/
 
     images = tf.layers.batch_normalization(images, training=is_training)
 
-    conv1_0 = convolution2d(images, name="conv1_0_op", filter_shape=[5, 5, num_channels, 32], strides=[1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
-    conv1_1 = convolution2d(conv1_0, name="conv1_1_op", filter_shape=[5, 5, 32, 32], strides=[1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
+    conv1_0 = convolution2d(images, name="conv1_0_op", filter_shape=[5, 5, num_channels, 8], strides=[1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
+    conv1_1 = convolution2d(conv1_0, name="conv1_1_op", filter_shape=[5, 5, 8, 8], strides=[1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
     pool1_0 = max_pool(conv1_1, name="pool1_0_op", kernel=[1,5,5,1], strides=[1,2,2,1], ps_device=ps_device, w_device=w_device)
 
-    conv2_0 = convolution2d(pool1_0, name="conv2_0_op", filter_shape=[5, 5, 32, 64], strides=[1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
-    conv2_1 = convolution2d(conv2_0, name="conv2_1_op", filter_shape=[5, 5, 64, 64], strides=[1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
+    conv2_0 = convolution2d(pool1_0, name="conv2_0_op", filter_shape=[5, 5, 8, 16], strides=[1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
+    conv2_1 = convolution2d(conv2_0, name="conv2_1_op", filter_shape=[5, 5, 16, 16], strides=[1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
     pool2_0 = max_pool(conv2_1, name="pool2_0_op", kernel=[1,5,5,1], strides=[1,2,2,1], ps_device=ps_device, w_device=w_device)
 
-    conv3_0 = convolution2d(pool2_0, name="conv3_0_op", filter_shape=[5, 5, 64, 128], strides=[1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
-    conv3_1 = convolution2d(conv3_0, name="conv3_1_op", filter_shape=[5, 5, 128, 128], strides=[1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
+    conv3_0 = convolution2d(pool2_0, name="conv3_0_op", filter_shape=[5, 5, 16, 32], strides=[1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
+    conv3_1 = convolution2d(conv3_0, name="conv3_1_op", filter_shape=[5, 5, 32, 32], strides=[1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
     pool3_0 = max_pool(conv3_1, name="pool3_0_op", kernel=[1,5,5,1], strides=[1,2,2,1], ps_device=ps_device, w_device=w_device)
     
     pool3_0 = tf.nn.dropout( pool3_0, keep_prob)
 
-    conv4_0 = convolution2d(pool3_0, name="conv4_0_op", filter_shape=[5, 5, 128, 256], strides=[1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
-    conv4_1 = convolution2d(conv4_0, name="conv4_1_op", filter_shape=[5, 5, 256, 256], strides=[1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
+    conv4_0 = convolution2d(pool3_0, name="conv4_0_op", filter_shape=[5, 5, 32, 64], strides=[1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
+    conv4_1 = convolution2d(conv4_0, name="conv4_1_op", filter_shape=[5, 5, 64, 64], strides=[1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
     up_out_shape_4 = conv3_1.get_shape().as_list()
     up_out_shape_4[0] = batch_size
-    up_conv4_0 = up_convolution2d(conv4_1, name="up_conv4_0_op", filter_shape=[5, 5, 128, 256], output_shape=up_out_shape_4, strides=[1,2,2,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
+    up_conv4_0 = up_convolution2d(conv4_1, name="up_conv4_0_op", filter_shape=[5, 5, 32, 64], output_shape=up_out_shape_4, strides=[1,2,2,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
     
-    # concat5_0 = tf.concat([up_conv4_0, conv3_1], -1)
+    concat5_0 = tf.concat([up_conv4_0, conv3_1], -1)
 
-    conv5_0 = convolution2d(up_conv4_0, name="conv5_0_op", filter_shape=[5, 5, 128, 128], strides=[1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
-    conv5_1 = convolution2d(conv5_0, name="conv5_1_op", filter_shape=[5, 5, 128, 128], strides=[1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
+    conv5_0 = convolution2d(concat5_0, name="conv5_0_op", filter_shape=[5, 5, 64, 32], strides=[1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
+    conv5_1 = convolution2d(conv5_0, name="conv5_1_op", filter_shape=[5, 5, 32, 32], strides=[1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
     up_out_shape_5 = conv2_1.get_shape().as_list()
     up_out_shape_5[0] = batch_size
-    up_conv5_0 = up_convolution2d(conv5_1, name="up_conv5_0_op", filter_shape=[5, 5, 64, 128], output_shape=up_out_shape_5, strides=[1,2,2,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
+    up_conv5_0 = up_convolution2d(conv5_1, name="up_conv5_0_op", filter_shape=[5, 5, 16, 32], output_shape=up_out_shape_5, strides=[1,2,2,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
     
-    # concat6_0 = tf.concat([up_conv5_0, conv2_1], -1)
+    concat6_0 = tf.concat([up_conv5_0, conv2_1], -1)
 
-    conv6_0 = convolution2d(up_conv5_0, name="conv6_0_op", filter_shape=[5, 5, 64, 64], strides=[1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
-    conv6_1 = convolution2d(conv6_0, name="conv6_1_op", filter_shape=[5, 5, 64, 64], strides=[1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
+    conv6_0 = convolution2d(concat6_0, name="conv6_0_op", filter_shape=[5, 5, 32, 16], strides=[1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
+    conv6_1 = convolution2d(conv6_0, name="conv6_1_op", filter_shape=[5, 5, 16, 16], strides=[1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
     up_out_shape_6 = conv1_1.get_shape().as_list()
     up_out_shape_6[0] = batch_size
-    up_conv6_0 = up_convolution2d(conv6_1, name="up_conv6_0_op", filter_shape=[5, 5, 32, 64], output_shape=up_out_shape_6, strides=[1,2,2,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
+    up_conv6_0 = up_convolution2d(conv6_1, name="up_conv6_0_op", filter_shape=[5, 5, 8, 16], output_shape=up_out_shape_6, strides=[1,2,2,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
     
-    # concat7_0 = tf.concat([up_conv6_0, conv1_1], -1)
+    concat7_0 = tf.concat([up_conv6_0, conv1_1], -1)
 
-    conv7_0 = convolution2d(up_conv6_0, name="conv7_0_op", filter_shape=[5, 5, 32, 32], strides=[1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
-    conv7_1 = convolution2d(conv7_0, name="conv7_1_op", filter_shape=[5, 5, 32, 32], strides=[1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
+    conv7_0 = convolution2d(concat7_0, name="conv7_0_op", filter_shape=[5, 5, 16, 8], strides=[1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
+    conv7_1 = convolution2d(conv7_0, name="conv7_1_op", filter_shape=[5, 5, 8, 8], strides=[1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
 
-    final = convolution2d(conv7_1, name="final", filter_shape=[1, 1, 32, 1], strides=[1,1,1,1], padding="SAME", activation=None, ps_device=ps_device, w_device=w_device)
+    final = convolution2d(conv7_1, name="final", filter_shape=[1, 1, 8, 1], strides=[1,1,1,1], padding="SAME", activation=None, ps_device=ps_device, w_device=w_device)
 
     return final
+
+def discriminator(images, num_labels=2, keep_prob=1, is_training=False, ps_device="/cpu:0", w_device="/gpu:0"):
+
+#   input: tensor of images
+#   output: tensor of computed logits
+    print_tensor_shape(images, "images")
+
+    shape = tf.shape(images)
+    batch_size = shape[0]
+    num_channels = images.get_shape().as_list()[-1]
+
+    conv1_0 = convolution2d(images, name="conv1_0_op", filter_shape=[3, 3, num_channels, 32], strides=[1,2,2,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
+    conv2_0 = convolution2d(conv1_0, name="conv2_0_op", filter_shape=[3, 3, 32, 64], strides=[1,2,2,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
+    conv3_0 = convolution2d(conv2_0, name="conv3_0_op", filter_shape=[3, 3, 64, 128], strides=[1,2,2,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
+    conv4_0 = convolution2d(conv3_0, name="conv4_0_op", filter_shape=[3, 3, 128, 256], strides=[1,2,2,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
+    conv5_0 = convolution2d(conv4_0, name="conv5_0_op", filter_shape=[3, 3, 256, 512], strides=[1,2,2,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
+    
+    conv5_0 = tf.nn.dropout( conv5_0, keep_prob)
+    dim = np.prod(conv5_0.get_shape().as_list()[1:])
+
+    conv4_0_flat = tf.reshape(conv5_0, [batch_size, dim])
+
+    matmul5_op = matmul(conv4_0_flat, 512, "Matmul5", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
+    matmul6_op = matmul(matmul5_op, num_labels, "Matmul6", activation=tf.nn.sigmoid, ps_device=ps_device, w_device=w_device)
+
+    return matmul6_op
 
 def metrics(logits, labels, name='collection_metrics'):
 
@@ -243,16 +275,16 @@ def metrics(logits, labels, name='collection_metrics'):
         metrics_obj = {}
         
         metrics_obj["MEAN_ABSOLUTE_ERROR"] = tf.metrics.mean_absolute_error(predictions=logits, labels=labels, weights=weight_map, name='mean_absolute_error')
-        metrics_obj["MEAN_SQUARED_ERROR"] = tf.metrics.mean_squared_error(predictions=logits, labels=labels, weights=weight_map, name='mean_squared_error')
-        metrics_obj["ROOT_MEAN_SQUARED_ERROR"] = tf.metrics.root_mean_squared_error(predictions=logits, labels=labels, weights=weight_map, name='root_mean_squared_error')
+        # metrics_obj["ACCURACY_DIS_GEN"] = tf.metrics.accuracy(predictions=gen_y_conv, labels=fake_y_, weights=weight_map, name='accuracy_gen')
+        # metrics_obj["ACCURACY_DIS_REAL"] = tf.metrics.accuracy(predictions=real_y_conv, labels=real_y_, weights=weight_map, name='accuracy_real')
+        
         
         for key in metrics_obj:
             tf.summary.scalar(key, metrics_obj[key][0])
 
         return metrics_obj
 
-
-def training(loss, learning_rate, decay_steps, decay_rate):
+def training(loss, learning_rate, decay_steps, decay_rate, var_list=tf.GraphKeys.TRAINABLE_VARIABLES):
     
     global_step = tf.Variable(0, name='global_step', trainable=False)
 
@@ -270,21 +302,13 @@ def training(loss, learning_rate, decay_steps, decay_rate):
     # Use the optimizer to apply the gradients that minimize the loss
     update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
     with tf.control_dependencies(update_ops):
-      train_op = optimizer.minimize(loss, global_step=global_step)
+      train_op = optimizer.minimize(loss, global_step=global_step, var_list=var_list)
 
     return train_op
 
-def loss(logits, labels, images=None, class_weights=None):
+def loss(logits, labels, class_weights=None):
     
     print_tensor_shape( logits, 'logits shape')
     print_tensor_shape( labels, 'labels shape')
 
-    shape = tf.shape(logits)
-    batch_size = shape[0]
-
-    logits_flat = tf.reshape(logits, [batch_size, -1])
-    labels_flat = tf.reshape(labels, [batch_size, -1])
-
-    loss = tf.abs(logits_flat - labels_flat)
-
-    return tf.reduce_sum(loss)
+    return tf.losses.sparse_softmax_cross_entropy(logits=logits, labels=labels)

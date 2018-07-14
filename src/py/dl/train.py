@@ -43,8 +43,11 @@ w_device = args.w_device
 neural_network = args.nn
 
 nn = importlib.import_module(neural_network)
+is_gan = "gan" in neural_network
 
 print('neural_network', neural_network)
+if is_gan:
+  print('using gan optimization scheme')
 print('json', json_filename)
 print('keep_prob', k_prob)
 print('learning_rate', learning_rate)
@@ -54,6 +57,8 @@ print('batch_size', batch_size)
 print('num_epochs', num_epochs)
 print('ps_device', ps_device)
 print('w_device', w_device)
+
+
 
 graph = tf.Graph()
 
@@ -67,59 +72,153 @@ with graph.as_default():
   
   keep_prob = tf.placeholder(tf.float32)
 
-  y_conv = nn.inference(x, keep_prob=keep_prob, is_training=True, ps_device=ps_device, w_device=w_device)
+  if is_gan:
+    # THIS IS THE GAN GENERATION NETWORK SCHEME
+    # run the generator network on the 'fake/bad quality' input images (encode/decode)
+    with tf.variable_scope("generator"):
+      gen_x = nn.inference(x, keep_prob=keep_prob, is_training=True, ps_device=ps_device, w_device=w_device)
 
-  # calculate the loss from the results of inference and the labels
-  loss = nn.loss(y_conv, y_)
+    with tf.variable_scope("discriminator") as scope:
+      # run the discriminator network on the generated images
+      gen_x = tf.layers.batch_normalization(gen_x, training=True)
+      y_ = tf.layers.batch_normalization(y_, training=True)
 
-  tf.summary.scalar("loss", loss)
+      fake_y = nn.discriminator(gen_x, keep_prob=keep_prob, num_labels=2, is_training=True, ps_device=ps_device, w_device=w_device)
 
-  train_step = nn.training(loss, learning_rate, decay_steps, decay_rate)
+      scope.reuse_variables()
+      real_y = nn.discriminator(y_, keep_prob=keep_prob, num_labels=2, is_training=True, ps_device=ps_device, w_device=w_device)
+      
 
-  metrics_eval = nn.metrics(y_conv, y_)
+    # calculate the loss for the fake/generated images
+    fake_y_ = tf.constant(np.zeros([batch_size], dtype=int))
+    real_y_ = tf.constant(np.ones([batch_size], dtype=int))
 
-  summary_op = tf.summary.merge_all()
+    # calculate the loss for the discriminator
+    loss_d = nn.loss(tf.concat([fake_y, real_y], axis=0), tf.concat([fake_y_, real_y_], axis=0))
+    tf.summary.scalar("loss_d", loss_d)
 
-  with tf.Session() as sess:
+    # calculate the loss for the generator, i.e., trick the discriminator
+    loss_g = nn.loss(fake_y, real_y_)
+    tf.summary.scalar("loss_g", loss_g)
 
-    sess.run([tf.global_variables_initializer(), tf.local_variables_initializer()])
-    saver = tf.train.Saver()
-    # specify where to write the log files for import to TensorBoard
-    now = datetime.now()
-    summary_writer = tf.summary.FileWriter(os.path.join(outvariablesdirname, modelname + "-" + now.strftime("%Y%m%d-%H%M%S")), sess.graph)
+    vars_train = tf.trainable_variables()
 
-    sess.run([iterator.initializer])
-    step = 0
+    vars_gen = [var for var in vars_train if 'generator' in var.name]        
+    vars_dis = [var for var in vars_train if 'discriminator' in var.name]    
 
-    while True:
-      try:
+    for var in vars_gen:
+      print('gen', var.name)
 
-        _, loss_value, summary, metrics = sess.run([train_step, loss, summary_op, metrics_eval], feed_dict={keep_prob: k_prob})
+    for var in vars_dis:
+      print('dis', var.name)
 
-        if step % 100 == 0:
-          print('OUTPUT: Step %d: loss = %.3f' % (step, loss_value))
+    # setup the training operations
+    with tf.variable_scope("train_discriminator") as scope:
+      train_op_d = nn.training(loss_d, learning_rate, decay_steps, decay_rate, vars_dis)
+    # with tf.variable_scope("train_generator") as scope:
+      train_op_g = nn.training(loss_g, learning_rate, decay_steps, decay_rate, vars_gen)
 
-          # output some data to the log files for tensorboard
-          summary_writer.add_summary(summary, step)
-          summary_writer.flush()
+    metrics_eval = nn.metrics(gen_x, y_)
 
-          metrics_str = '|'
+    summary_op = tf.summary.merge_all()
 
-          for metric in metrics:
-            metrics_str += " %s = %.3f |" % (metric, metrics[metric][0])
+    with tf.Session() as sess:
 
-          print(metrics_str)
+      sess.run([tf.global_variables_initializer(), tf.local_variables_initializer()])
+      saver = tf.train.Saver()
+      # specify where to write the log files for import to TensorBoard
+      now = datetime.now()
+      summary_writer = tf.summary.FileWriter(os.path.join(outvariablesdirname, modelname + "-" + now.strftime("%Y%m%d-%H%M%S")), sess.graph)
 
-          # less frequently output checkpoint files.  Used for evaluating the model
-        if step % 1000 == 0:
-          save_path = saver.save(sess, os.path.join(outvariablesdirname, modelname), global_step=step)
+      sess.run([iterator.initializer])
+      step = 0
 
-        step += 1
+      while True:
+        try:
 
-      except tf.errors.OutOfRangeError:
-        break
+          _d, _g, loss_value_d, loss_value_g, summary, metrics = sess.run([train_op_d, train_op_g, loss_d, loss_g, summary_op, metrics_eval], feed_dict={keep_prob: k_prob})
 
-    outmodelname = os.path.join(outvariablesdirname, modelname)
-    print('Step:', step)
-    print('Saving model:', outmodelname)
-    saver.save(sess, outmodelname, global_step=step)
+          if step % 100 == 0:
+            print('OUTPUT: Step %d: loss_g = %.3f, loss_d = %.3f' % (step, loss_value_g, loss_value_d))
+
+            # output some data to the log files for tensorboard
+            summary_writer.add_summary(summary, step)
+            summary_writer.flush()
+
+            metrics_str = '|'
+
+            for metric in metrics:
+              metrics_str += " %s = %.3f |" % (metric, metrics[metric][0])
+
+            print(metrics_str)
+
+            # less frequently output checkpoint files.  Used for evaluating the model
+          if step % 1000 == 0:
+            save_path = saver.save(sess, os.path.join(outvariablesdirname, modelname), global_step=step)
+
+          step += 1
+
+        except tf.errors.OutOfRangeError:
+          break
+
+      outmodelname = os.path.join(outvariablesdirname, modelname)
+      print('Step:', step)
+      print('Saving model:', outmodelname)
+      saver.save(sess, outmodelname, global_step=step)
+
+  else:
+    # THIS IS THE STANDARD OPIMIZATION SCHEME FOR NETWORKS SUCH AS UNET OR LABEL MAPS
+    y_conv = nn.inference(x, keep_prob=keep_prob, is_training=True, ps_device=ps_device, w_device=w_device)
+    loss = nn.loss(y_conv, y_)
+
+    tf.summary.scalar("loss", loss)
+
+    train_step = nn.training(loss, learning_rate, decay_steps, decay_rate)
+
+    metrics_eval = nn.metrics(y_conv, y_)
+
+    summary_op = tf.summary.merge_all()
+
+    with tf.Session() as sess:
+
+      sess.run([tf.global_variables_initializer(), tf.local_variables_initializer()])
+      saver = tf.train.Saver()
+      # specify where to write the log files for import to TensorBoard
+      now = datetime.now()
+      summary_writer = tf.summary.FileWriter(os.path.join(outvariablesdirname, modelname + "-" + now.strftime("%Y%m%d-%H%M%S")), sess.graph)
+
+      sess.run([iterator.initializer])
+      step = 0
+
+      while True:
+        try:
+
+          _, loss_value, summary, metrics = sess.run([train_step, loss, summary_op, metrics_eval], feed_dict={keep_prob: k_prob})
+
+          if step % 100 == 0:
+            print('OUTPUT: Step %d: loss = %.3f' % (step, loss_value))
+
+            # output some data to the log files for tensorboard
+            summary_writer.add_summary(summary, step)
+            summary_writer.flush()
+
+            metrics_str = '|'
+
+            for metric in metrics:
+              metrics_str += " %s = %.3f |" % (metric, metrics[metric][0])
+
+            print(metrics_str)
+
+            # less frequently output checkpoint files.  Used for evaluating the model
+          if step % 1000 == 0:
+            save_path = saver.save(sess, os.path.join(outvariablesdirname, modelname), global_step=step)
+
+          step += 1
+
+        except tf.errors.OutOfRangeError:
+          break
+
+      outmodelname = os.path.join(outvariablesdirname, modelname)
+      print('Step:', step)
+      print('Saving model:', outmodelname)
+      saver.save(sess, outmodelname, global_step=step)

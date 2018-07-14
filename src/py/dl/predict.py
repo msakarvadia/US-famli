@@ -40,9 +40,12 @@ w_device = args.w_device
 print('neural_network', neural_network)
 print('model_name', model_name)
 print('neural_network', neural_network)
-
+is_gan = "gan" in neural_network
+if is_gan:
+  print('Using gan scheme')
 print('ps_device', ps_device)
 print('w_device', w_device)
+print('out', out_name)
 
 nn = importlib.import_module(neural_network)
 
@@ -63,7 +66,7 @@ elif(args.dir):
     filenames.append(fobj)
 
 
-InputType = itk.Image[itk.US,2]
+InputType = itk.Image[itk.F,2]
 img_read = itk.ImageFileReader[InputType].New(FileName=filenames[0]["img"])
 img_read.Update()
 img = img_read.GetOutput()
@@ -85,7 +88,12 @@ with graph.as_default():
   
   keep_prob = tf.placeholder(tf.float32)
 
-  y_conv = nn.inference(x, keep_prob=1.0, is_training=False, ps_device=ps_device, w_device=w_device)
+  if is_gan:
+    with tf.variable_scope("generator"):
+      y_conv = nn.inference(x, keep_prob=1.0, is_training=False, ps_device=ps_device, w_device=w_device)
+  else:
+    y_conv = nn.inference(x, keep_prob=1.0, is_training=False, ps_device=ps_device, w_device=w_device)
+
   label = y_conv
 
   with tf.Session() as sess:

@@ -43,7 +43,7 @@ typedef VectorImageIteratorType::RadiusType VectorImageRadiusType;
 typedef itk::ImageFileWriter<VectorImageType> VectorImageFileWriterType;
 
 bool containsLabel(InputImagePointerType labelImage, InputIteratorRadiusType radius, InputImageIndexType index, int labelValueContains, double labelValueContainsPercentageMax){
-	if(labelImage && labelValueContains > 0){
+	if(labelImage && labelValueContains >= 0){
 		int count = 0;
 
 		InputIteratorType init(radius, labelImage, labelImage->GetLargestPossibleRegion());
