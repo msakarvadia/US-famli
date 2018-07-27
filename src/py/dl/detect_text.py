@@ -42,4 +42,8 @@ parser.add_argument('--out', type=str, help='Output text', default="./out.json")
 
 args = parser.parse_args()
 
-detect_text(args)
+try:
+    detect_text(args)
+except Exception as e:
+    print(e)
+    print("Set environment variable 'export GOOGLE_APPLICATION_CREDENTIALS=/path/to/json/with_credentials.json' documentation at https://cloud.google.com/docs/authentication/getting-started") 
