@@ -9,6 +9,7 @@ from datetime import datetime
 import json
 import glob
 import itk
+import sys
 
 print("Tensorflow version:", tf.__version__)
 
@@ -21,6 +22,8 @@ in_group.add_argument('--img', type=str, help='Input image for prediction')
 in_group.add_argument('--dir', type=str, help='Directory with images for prediction')
 
 parser.add_argument('--out', type=str, help='Output image or directory. If dir flag is used the output image name will be the <Directory set in out flag>/<imgage filename in directory dir>', default="./out.nrrd")
+parser.add_argument('--ow', type=int, help='Overwrite outputs', default=1)
+parser.add_argument('--resize', nargs="+", type=int, help='Resize images during prediction, useful when doing whole directories with images of diferent sizes. This is needed to set the value of the placeholder. e.x. 1 1500 1500 1', default=None)
 parser.add_argument('--model', help='Input modelname', required=True)
 parser.add_argument('--nn', type=str, help='Type of neural network to use', default='u_nn')
 parser.add_argument('--num_labels', help='Number of labels for the softmax output', type=int, default=2)
@@ -33,6 +36,7 @@ args = parser.parse_args()
 model_name = args.model
 neural_network = args.nn
 out_name = args.out
+resize_shape = args.resize
 num_labels = args.num_labels
 ps_device = args.ps_device
 w_device = args.w_device
@@ -45,40 +49,56 @@ if is_gan:
   print('Using gan scheme')
 print('ps_device', ps_device)
 print('w_device', w_device)
-print('out', out_name)
 
 nn = importlib.import_module(neural_network)
 
 filenames = []
 
 if(args.img):
-  print('image_name', args.img)
+  print('imgage_name', args.img)
   fobj = {}
   fobj["img"] = args.img
   fobj["out"] = args.out
-  filenames.append(fobj)
+  if args.ow or not os.path.exists(fobj["out"]):
+    filenames.append(fobj)
 elif(args.dir):
   print('dir', args.dir)
   for img in glob.iglob(os.path.join(args.dir, '**/*'), recursive=True):
-    fobj = {}
-    fobj["img"] = img
-    fobj["out"] = os.path.join(args.out, os.path.basename(img))
-    filenames.append(fobj)
+    if os.path.isfile(img) and True in [ext in img for ext in [".nrrd", ".nii", ".nii.gz", ".mhd", ".dcm", ".jpg", ".png"]]:
+      fobj = {}
+      fobj["img"] = img
+      fobj["out"] = os.path.join(args.out, img.replace(args.dir, ''))
+      if not os.path.exists(os.path.dirname(fobj["out"])):
+        os.makedirs(os.path.dirname(fobj["out"]))
 
+      if args.ow or not os.path.exists(fobj["out"]):
+        filenames.append(fobj)
 
-InputType = itk.Image[itk.F,2]
-img_read = itk.ImageFileReader[InputType].New(FileName=filenames[0]["img"])
-img_read.Update()
-img = img_read.GetOutput()
+print('ow', args.ow)
+print('out', out_name)
 
-img_np = itk.GetArrayViewFromImage(img)
-img_shape = img_np.shape
+if len(filenames) == 0:
+  print("No images found with extensions", [".nrrd", ".nii", ".nii.gz", ".mhd", ".dcm", ".jpg", ".png"], file=sys.stderr)
+  sys.exit()
 
-# The image is 2d but we reshape according to the number of channels
-if(len(img_shape) == 2):
-    img_shape = img_shape + (1,)
+if resize_shape is None:
+  try:
+    InputType = itk.Image[itk.F,2]
+    img_read = itk.ImageFileReader[InputType].New(FileName=filenames[0]["img"])
+    img_read.Update()
+    img = img_read.GetOutput()
+  except Exception as e:
+    print("Error predicting image", filenames[0].img, e, file=sys.stderr)
+    sys.exit()
 
-img_shape = (1,) + img_shape
+  img_np = itk.GetArrayViewFromImage(img)
+  img_shape = img_np.shape
+  # The image is 2d but we reshape according to the number of channels
+  if(len(img_shape) == 2):
+      img_shape = img_shape + (1,)
+  img_shape = (1,) + img_shape
+else:
+  img_shape = resize_shape
 
 graph = tf.Graph()
 
@@ -102,31 +122,42 @@ with graph.as_default():
     saver = tf.train.Saver()
     saver.restore(sess, model_name)
 
-    # specify where to write the log files for import to TensorBoard
-    now = datetime.now()
-
     print("I am self aware!")
 
     for img_obj in filenames:
 
       print("Predicting:", img_obj["img"])
 
-      img_read = itk.ImageFileReader[InputType].New(FileName=img_obj["img"])
-      img_read.Update()
-      img = img_read.GetOutput()
+      try:
+        img_read = itk.ImageFileReader[InputType].New(FileName=img_obj["img"])
+        img_read.Update()
+        img = img_read.GetOutput()
 
-      img_np = itk.GetArrayViewFromImage(img)
+        img_np = itk.GetArrayViewFromImage(img)
 
-      label_map = sess.run([label], feed_dict={x: np.reshape(img_np, img_shape)})
+        img_shape_current = img_np.shape
+        # The image is 2d but we reshape according to the number of channels
+        if(len(img_shape_current) == 2):
+            img_shape_current = img_shape_current + (1,)
+        img_shape_current = (1,) + img_shape_current
 
-      label_map = np.reshape(label_map[0], img_np.shape)
-      label_map = np.absolute(label_map)
+        img_np_x = np.reshape(img_np, img_shape_current)
+        img_np_x = np.resize(img_np_x, img_shape)
 
-      img_np.setfield(label_map,img_np.dtype)
+        label_map = sess.run([label], feed_dict={x: img_np_x})
 
-      print("Writing:", img_obj["out"])
-      writer = itk.ImageFileWriter.New(FileName=img_obj["out"], Input=img)
-      writer.Update()
+        label_map = np.resize(label_map, img_shape_current)
+        label_map = np.reshape(label_map, img_np.shape)
+        label_map = np.absolute(label_map)
+
+        img_np.setfield(label_map,img_np.dtype)
+
+        print("Writing:", img_obj["out"])
+        writer = itk.ImageFileWriter.New(FileName=img_obj["out"], Input=img)
+        writer.Update()
+      except Exception as e:
+        print("Error predicting image", e)
+        print("Continuing...")
 
     print("jk, bye")
         
