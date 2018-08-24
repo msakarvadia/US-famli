@@ -23,7 +23,7 @@ in_group.add_argument('--dir', type=str, help='Directory with images for predict
 
 parser.add_argument('--out', type=str, help='Output image or directory. If dir flag is used the output image name will be the <Directory set in out flag>/<imgage filename in directory dir>', default="./out.nrrd")
 parser.add_argument('--ow', type=int, help='Overwrite outputs', default=1)
-parser.add_argument('--resize', nargs="+", type=int, help='Resize images during prediction, useful when doing whole directories with images of diferent sizes. This is needed to set the value of the placeholder. e.x. 1 1500 1500 1', default=None)
+parser.add_argument('--resize', nargs="+", type=int, help='Resize images during prediction, useful when doing whole directories with images of diferent sizes. This is needed to set the value of the placeholder for tensorflow. e.x. 1500 1500. The image will be resized for the prediction but the original image size will be stored. Do not include the channels/pixel components in the resize parameters', default=None)
 parser.add_argument('--model', help='Input modelname', required=True)
 parser.add_argument('--nn', type=str, help='Type of neural network to use', default='u_nn')
 parser.add_argument('--num_labels', help='Number of labels for the softmax output', type=int, default=2)
@@ -49,6 +49,8 @@ if is_gan:
   print('Using gan scheme')
 print('ps_device', ps_device)
 print('w_device', w_device)
+print('ow', args.ow)
+print('out', out_name)
 
 nn = importlib.import_module(neural_network)
 
@@ -62,43 +64,47 @@ if(args.img):
   if args.ow or not os.path.exists(fobj["out"]):
     filenames.append(fobj)
 elif(args.dir):
-  print('dir', args.dir)
-  for img in glob.iglob(os.path.join(args.dir, '**/*'), recursive=True):
+  
+  normpath = os.path.normpath("/".join([args.dir, '**', '*']))
+
+  for img in glob.iglob(normpath, recursive=True):
     if os.path.isfile(img) and True in [ext in img for ext in [".nrrd", ".nii", ".nii.gz", ".mhd", ".dcm", ".jpg", ".png"]]:
       fobj = {}
       fobj["img"] = img
-      fobj["out"] = os.path.join(args.out, img.replace(args.dir, ''))
+
+      image_dir_filename = img.replace(args.dir, '')
+      fobj["out"] = os.path.normpath("/".join([args.out, image_dir_filename]))
+
       if not os.path.exists(os.path.dirname(fobj["out"])):
         os.makedirs(os.path.dirname(fobj["out"]))
 
       if args.ow or not os.path.exists(fobj["out"]):
         filenames.append(fobj)
 
-print('ow', args.ow)
-print('out', out_name)
-
 if len(filenames) == 0:
   print("No images found with extensions", [".nrrd", ".nii", ".nii.gz", ".mhd", ".dcm", ".jpg", ".png"], file=sys.stderr)
   sys.exit()
 
-if resize_shape is None:
-  try:
-    InputType = itk.Image[itk.F,2]
-    img_read = itk.ImageFileReader[InputType].New(FileName=filenames[0]["img"])
-    img_read.Update()
-    img = img_read.GetOutput()
-  except Exception as e:
-    print("Error predicting image", filenames[0].img, e, file=sys.stderr)
-    sys.exit()
+components_pixel = 1
+try:
+  InputType = itk.Image[itk.US,2]
+  img_read = itk.ImageFileReader[InputType].New(FileName=filenames[0]["img"])
+  img_read.Update()
+  img = img_read.GetOutput()
+  components_pixel = img.GetNumberOfComponentsPerPixel()
+except Exception as e:
+  print("Error predicting image", filenames[0].img, e, file=sys.stderr)
+  sys.exit()
 
+if(resize_shape is None):
   img_np = itk.GetArrayViewFromImage(img)
-  img_shape = img_np.shape
-  # The image is 2d but we reshape according to the number of channels
-  if(len(img_shape) == 2):
-      img_shape = img_shape + (1,)
-  img_shape = (1,) + img_shape
+  if(components_pixel == 1):
+    img_shape = (1,) + img_np.shape + (1,)
+  else:
+    img_shape = (1,) + img_np.shape 
 else:
-  img_shape = resize_shape
+  resize_shape = tuple(resize_shape)
+  img_shape = (1,) + resize_shape + (components_pixel,)
 
 graph = tf.Graph()
 
@@ -134,21 +140,42 @@ with graph.as_default():
         img = img_read.GetOutput()
 
         img_np = itk.GetArrayViewFromImage(img)
-
         img_shape_current = img_np.shape
-        # The image is 2d but we reshape according to the number of channels
-        if(len(img_shape_current) == 2):
-            img_shape_current = img_shape_current + (1,)
-        img_shape_current = (1,) + img_shape_current
 
-        img_np_x = np.reshape(img_np, img_shape_current)
-        img_np_x = np.resize(img_np_x, img_shape)
+        if(resize_shape):
+          
+          img_np_x = np.zeros(img_shape)
 
-        label_map = sess.run([label], feed_dict={x: img_np_x})
+          if(img.GetNumberOfComponentsPerPixel() == 1):
+            img_reshape_current = (1,) + img_shape_current + (1,)
+          else:
+            img_reshape_current = (1,) + img_shape_current
 
-        label_map = np.resize(label_map, img_shape_current)
-        label_map = np.reshape(label_map, img_np.shape)
+          prediction_shape = []
+          for r_s, i_s in zip(img_shape, img_reshape_current):
+            if(r_s >= i_s):
+              prediction_shape.append("0:" + str(i_s))
+            else:
+              print("The resize shape is smaller than the current image shape...", img_obj["img"], file=sys.stderr)
+              prediction_shape.append("0:")
+
+          assign_img = "img_np_x[" + ",".join(prediction_shape) + "]=np.reshape(img_np, img_reshape_current)"
+          exec(assign_img)
+
+        else:
+          img_np_x = np.reshape(img_np, img_shape)
+
+        label_map = sess.run([label], feed_dict={x: img_np_x.astype(np.float32)})
+
+        if(resize_shape):
+          label_map = np.reshape(label_map, img_shape)
+          assign_img = "label_map=label_map[" + ",".join(prediction_shape) + "]"
+          print(assign_img)
+          exec(assign_img)
+
+        label_map = np.reshape(label_map, img_shape_current)
         label_map = np.absolute(label_map)
+        label_map = label_map.astype(np.uint16)
 
         img_np.setfield(label_map,img_np.dtype)
 
