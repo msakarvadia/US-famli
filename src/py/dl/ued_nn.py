@@ -19,24 +19,23 @@ class ReadAndDecode:
 
         self.keys_to_features = {}
 
-        if("image_keys" in self.data_description):
-
-            for img_key in self.data_description["image_keys"]:
-                self.keys_to_features[img_key] = tf.FixedLenFeature((np.prod(self.data_description[img_key + "_shape"])), tf.float32)
-
+        if("data_keys" in self.data_description):
+            for data_key in self.data_description["data_keys"]:
+                self.keys_to_features[data_key] = tf.FixedLenFeature((np.prod(self.data_description[data_key]["shape"])), eval(self.data_description[data_key]["type"]))
         else:
-            print("Nothing to decode! image_keys missing in object description object. tfRecords.py creates this descriptor.")
+            print("Nothing to decode! data_keys missing in object description object. tfRecords.py creates this descriptor.")
             raise
 
     def read_and_decode(self, record):
 
         parsed = tf.parse_single_example(record, self.keys_to_features)
-        reshaped_parsed = {}
+        reshaped_parsed = []
 
-        for img_key in self.data_description["image_keys"]:
-            reshaped_parsed[img_key] = tf.reshape(parsed[img_key], self.data_description[img_key + "_shape"])
+        if("data_keys" in self.data_description):
+            for data_key in self.data_description["data_keys"]:
+                reshaped_parsed.append(tf.reshape(parsed[data_key], self.data_description[data_key]["shape"]))
 
-        return reshaped_parsed["image"], reshaped_parsed["image1"]
+        return tuple(reshaped_parsed)
 
 def inputs(json_filename, batch_size=1, num_epochs=1):
 
@@ -184,7 +183,9 @@ def matmul(x, out_channels, name='matmul', activation=tf.nn.relu, ps_device="/cp
 
         return matmul_op
 
-def inference(images, num_labels=2, keep_prob=1, is_training=False, ps_device="/cpu:0", w_device="/gpu:0"):
+def inference(data_tuple, keep_prob=1, is_training=False, ps_device="/cpu:0", w_device="/gpu:0"):
+
+    images = data_tuple[0]
 
 #   input: tensor of images
 #   output: tensor of computed logits
@@ -241,8 +242,9 @@ def inference(images, num_labels=2, keep_prob=1, is_training=False, ps_device="/
 
     return final
 
-def metrics(logits, labels, name='collection_metrics'):
+def metrics(logits, data_tuple, name='collection_metrics'):
 
+    labels = data_tuple[1]
     with tf.variable_scope(name):
         weight_map = None
 
@@ -281,8 +283,10 @@ def training(loss, learning_rate, decay_steps, decay_rate):
 
     return train_op
 
-def loss(logits, labels, class_weights=None):
+def loss(logits, data_tuple, class_weights=None):
     
+    labels = data_tuple[1]
+
     print_tensor_shape( logits, 'logits shape')
     print_tensor_shape( labels, 'labels shape')
 

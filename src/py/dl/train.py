@@ -13,7 +13,7 @@ print("Tensorflow version:", tf.__version__)
 
 parser = argparse.ArgumentParser(description='U network for segmentation', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
-parser.add_argument('--json', type=str, help='json file with the description of the inputs, generate it with tfRecords.py')
+parser.add_argument('--json', type=str, help='json file with the description of the inputs, generate it with tfRecords.py', required=True)
 parser.add_argument('--nn', type=str, help='Type of neural network to use', default='u_nn')
 parser.add_argument('--out', help='Output dirname for the model', default="./out")
 parser.add_argument('--model', help='Output modelname, the output name will be <out directory>/model-<num step>', default="model")
@@ -68,7 +68,7 @@ with graph.as_default():
     num_epochs=num_epochs,
     json_filename=json_filename)
 
-  x, y_ = iterator.get_next()
+  data_tuple = iterator.get_next()
   
   keep_prob = tf.placeholder(tf.float32)
 
@@ -118,7 +118,7 @@ with graph.as_default():
     # with tf.variable_scope("train_generator") as scope:
       train_op_g = nn.training(loss_g, learning_rate, decay_steps, decay_rate, vars_gen)
 
-    metrics_eval = nn.metrics(gen_x, y_)
+    metrics_eval = nn.metrics(gen_x, data_tuple)
 
     summary_op = tf.summary.merge_all()
 
@@ -168,14 +168,14 @@ with graph.as_default():
 
   else:
     # THIS IS THE STANDARD OPIMIZATION SCHEME FOR NETWORKS SUCH AS UNET OR LABEL MAPS
-    y_conv = nn.inference(x, keep_prob=keep_prob, is_training=True, ps_device=ps_device, w_device=w_device)
-    loss = nn.loss(y_conv, y_)
+    y_conv = nn.inference(data_tuple, keep_prob=keep_prob, is_training=True, ps_device=ps_device, w_device=w_device)
+    loss = nn.loss(y_conv, data_tuple)
 
     tf.summary.scalar("loss", loss)
 
     train_step = nn.training(loss, learning_rate, decay_steps, decay_rate)
 
-    metrics_eval = nn.metrics(y_conv, y_)
+    metrics_eval = nn.metrics(y_conv, data_tuple)
 
     summary_op = tf.summary.merge_all()
 
