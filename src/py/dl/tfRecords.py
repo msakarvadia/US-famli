@@ -9,6 +9,8 @@ import sys
 import json
 import csv
 import uuid
+from collections import namedtuple
+import nrrd3D_2D
 
 def _int64_feature(value):
 	if not isinstance(value, list):
@@ -40,9 +42,6 @@ def main(args):
 	with open(args.csv) as csvfile:
 
 		csv_reader = csv.DictReader(csvfile)
-		for row in csv_reader:
-			csv_rows.append(row)
-
 		row_keys = csv_reader.fieldnames.copy()
 
 		if("tfRecord" in row_keys):
@@ -50,17 +49,77 @@ def main(args):
 		if(not "data_keys" in obj):
 			obj["data_keys"] = row_keys
 
+		for row in csv_reader:
+			# If we need to slice the images, save 2D slices with the same dimensions
+			if args.slice:
+				slice_imgs = []
+				slice_csv_headers = []
+
+				# We check if the path exists, then we read it as an image
+				for key in row_keys:
+					if os.path.exists(row[key]):
+						if not key in slice_csv_headers:
+							slice_csv_headers.append(key)
+						slice_imgs.append(row[key])
+
+				# We generate an object with the corresponding parameters
+				slice_obj = {}
+				slice_obj["img"] = slice_imgs
+				slice_obj["out_csv_headers"] = slice_csv_headers
+				slice_obj["out_csv"] = os.path.join(args.out, "slice.csv")
+				slice_obj["out"] = os.path.join(args.out, "slice")
+
+				# We convert the dictionary to a namedtuple, a.k.a, python object, i.e., argparse object
+				slice_args = namedtuple("Slice", slice_obj.keys())(*slice_obj.values())
+				# Call the main of the script
+				nrrd3D_2D.main(slice_args)
+				
+				# We read the saved data and append the properties of the 3D image to all slices
+				with open(slice_obj["out_csv"]) as csvfileslice:
+					csv_slice_reader = csv.DictReader(csvfileslice)
+					for slice_row in csv_slice_reader:
+						for rk in row_keys:
+							if(not rk in csv_slice_reader.fieldnames):
+								slice_row[rk] = row[rk]
+						# We now have a csv_rows list with slices instead of 3D volumes
+						csv_rows.append(slice_row)
+			else:
+				csv_rows.append(row)
+
 	if(not os.path.exists(args.out) or not os.path.isdir(args.out)):
 		os.makedirs(args.out)
 
 	if(args.enumerate):
+		obj["enumerate"] = args.enumerate
 		obj[args.enumerate] = {}
-		class_number = 0
+		obj[args.enumerate]["class"] = {}
+		#This is the number of classes
+		num_class = 0
+		print("Enumerate classes...")
 		for fobj in csv_rows:
 			class_name = fobj[args.enumerate]
-			if(not class_name in obj[args.enumerate]):
-				obj[args.enumerate][class_name] = class_number
-				class_number += 1
+			print("Enumerate", class_name)
+			if os.path.exists(class_name):
+				#Count number of labels in image
+				img_label_read = itk.ImageFileReader.New(FileName=class_name)
+				img_label_read.Update()
+				img_label = img_label_read.GetOutput()
+
+				label_stats = itk.LabelStatisticsImageFilter[type(img_label),type(img_label)].New()
+				label_stats.SetInput(img_label)
+				label_stats.SetLabelInput(img_label)
+				label_stats.Update()
+				
+				for class_label in label_stats.GetValidLabelValues():
+					if(not class_label in obj[args.enumerate]["class"]):
+						obj[args.enumerate]["class"][class_label] = num_class
+						num_class += 1
+
+			elif(not class_name in obj[args.enumerate]["class"]):
+				obj[args.enumerate]["class"][class_name] = num_class
+				num_class += 1
+		#Put the total of elements for convenience
+		obj[args.enumerate]["num_class"] = num_class
 
 		print(obj[args.enumerate])
 
@@ -72,11 +131,11 @@ def main(args):
 
 			for key in row_keys:
 
+				if(not key in obj):
+					obj[key] = {}
+
 				##If the path exists then it will try to read it as an image
 				if(os.path.exists(fobj[key])):
-
-					if(not key in obj):
-						obj[key] = {}
 
 					img_read = itk.ImageFileReader.New(FileName=fobj[key])
 					img_read.Update()
@@ -91,15 +150,17 @@ def main(args):
 						# If the first component is 1 we remove it. It means that is a 2D image but was saved as 3D
 						img_shape = img_shape[1:]
 
-					# This is the number of channels, if the components is 1, is not included in the image shape
-					# If it has more than one component, it is included in the shape
+					# This is the number of channels, if the number of components is 1, it is not included in the image shape
+					# If it has more than one component, it is included in the shape, that's why we have to add the 1
 					if(img.GetNumberOfComponentsPerPixel() == 1):
 						img_shape = img_shape + [1]
 
 					if(not "shape" in obj[key]):
 						obj[key]["shape"] = img_shape
 					else:
-						obj[key]["shape"] = np.maximum(obj[key]["shape"], img_shape).tolist()
+						if not np.all(np.equal(obj[key]["shape"] , img_shape)):
+							print(fobj[key], file=sys.stderr)
+							raise "The images in your training set do not have the same dimensions!"
 
 					if(not "max" in obj[key]):
 						obj[key]["max"] = np.max(img_np)
@@ -115,8 +176,10 @@ def main(args):
 						obj[key]["type"] = "tf.float32"
 					
 				elif(args.enumerate and key == args.enumerate):
+					# If its an enumeration, it will save the class enumeration as int. If is a label map, it never reached this step
+					# because it was read as an image. 
 					class_name = fobj[key]
-					class_number = int(obj[args.enumerate][class_name])
+					class_number = int(obj[args.enumerate]["class"][class_name])
 
 					feature[key] = _int64_feature(class_number)
 
@@ -124,40 +187,29 @@ def main(args):
 						obj[key]["shape"] = [1]
 
 					if(not "type" in obj[key]):
-						obj[key]["type"] = "tf.int32"
+						obj[key]["type"] = "tf.int64"
 
 				else:
-					#If is not an image, try to put what ever data is in there into the TF Record
 					try:
-						# Try converting the data to int, if it is a float it will fail
-						feature[key] = _int64_feature(int(fobj[key]))
+						# If the previous failed, try converting it to float
+						feature[key] = _float_feature(np.array([float(fobj[key])]).tolist())
 
 						if(not "shape" in obj[key]):
 							obj[key]["shape"] = [1]
 
 						if(not "type" in obj[key]):
-							obj[key]["type"] = "tf.int32"
+							obj[key]["type"] = "tf.float32"
 					except:
-						try:
-							# If the previous failed, try converting it to float
-							feature[key] = _float_feature(float(fobj[key]))
+						# If it fails the try saving it as a bytes feature
+						# encode the string
+						
+						feature[key] = _bytes_feature(obj[key].encode())
 
-							if(not "shape" in obj[key]):
-								obj[key]["shape"] = [1]
+						if(not "shape" in obj[key]):
+							obj[key]["shape"] = [1]
 
-							if(not "type" in obj[key]):
-								obj[key]["type"] = "tf.float32"
-						except:
-							# If it fails the try saving it as a bytes feature
-							# Convert the string to a list
-							str_list = list(fobj[key])
-							feature[key] = _bytes_feature(str_list)
-
-							if(not "shape" in obj[key]):
-								obj[key]["shape"] = [len(str_list)]
-
-							if(not "type" in obj[key]):
-								obj[key]["type"] = "tf.string"
+						if(not "type" in obj[key]):
+							obj[key]["type"] = "tf.string"
 		
 			if("tfRecord" in fobj):
 				record_path = fobj["tfRecord"]
@@ -199,10 +251,11 @@ def main(args):
 				writer.writerow(row)
 
 if __name__ == "__main__":
-	parser = argparse.ArgumentParser(description='Writes data to tfrecords format using a CSV file description as input and creates a JSON file with a description. The column headers are used as keys to store in the tfRecord. a row may contain image filenames to save in tfRecords format. If an image column is found, the maximum pixel value for each image is calulated and written into the json file. Additionally, it will save a new csv file indicating which tfRecord corresponds to the row.')
+	parser = argparse.ArgumentParser(description='Writes data to tfrecords format using a CSV file description as input and creates a JSON file with a description. The column headers are used as keys to store in the tfRecord. a row may contain image filenames, categories or other information to save in tfRecords format. If an image column is found, the maximum pixel value for each image is calulated and written into the json file. Additionally, it will save a new csv file indicating which tfRecord corresponds to the row.')
 	
 	parser.add_argument('--csv', type=str, help='CSV file with dataset information,', required=True)
-	parser.add_argument('--enumerate', type=str, help='Column name in CSV. Enumerate the elements in the column, i.e., in case you are using text labels to identify the classes of your data, an enumeration will be made before storing into tfRecords.')
+	parser.add_argument('--enumerate', type=str, default=None, help='Column name in CSV. If you are storing a label or category to perform a classification task. If it is an image, it will read the FIRST image in your csv and extract the existing labels.')
+	parser.add_argument('--slice', type=bool, default=False, help="If it is a 3D image, saves slices in all the major axis and the stores them as tfRecords")
 	parser.add_argument('--out', type=str, default="./out", help="Output directory")
 
 	args = parser.parse_args()
