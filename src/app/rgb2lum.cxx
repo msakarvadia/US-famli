@@ -5,6 +5,7 @@
 #include <itkImageFileReader.h>
 #include <itkImageFileWriter.h>
 #include <itkRGBToLuminanceImageFilter.h>
+#include <itkCastImageFilter.h>
 
 using namespace std;
 
@@ -20,7 +21,7 @@ int main (int argc, char * argv[]){
     cout << "The input image is: " << inputImageFilename << endl;
 
     //Read Image
-    typedef unsigned char InputPixelType;
+    typedef double InputPixelType;
     static const int dimension = 3;
     typedef itk::Image< InputPixelType, dimension> InputImageType;
     typedef InputImageType::Pointer InputImagePointerType;
@@ -28,7 +29,7 @@ int main (int argc, char * argv[]){
     typedef itk::ImageRegionIterator< InputImageType > ImageRegionIteratorType;
     
 
-    typedef itk::Image< itk::RGBPixel<unsigned char>, dimension> InputRGBImageType;
+    typedef itk::Image< itk::RGBPixel<double>, dimension> InputRGBImageType;
     typedef itk::ImageFileReader< InputRGBImageType > InputImageRGBFileReaderType;
     
     InputImageRGBFileReaderType::Pointer reader = InputImageRGBFileReaderType::New();
@@ -43,12 +44,24 @@ int main (int argc, char * argv[]){
     InputImagePointerType outputimg = lumfilter->GetOutput();
 
 
-    typedef itk::ImageFileWriter< InputImageType > InputLabelImageFileWriterType;
-    InputLabelImageFileWriterType::Pointer writer = InputLabelImageFileWriterType::New();
+    typedef unsigned char OutputPixelType;
+    typedef itk::Image< OutputPixelType, dimension> OutputImageType;
+
+
+    typedef itk::CastImageFilter< InputImageType, OutputImageType > CastImageFilterType;
+
+    CastImageFilterType::Pointer cast = CastImageFilterType::New();
+
+    cast->SetInput(outputimg);
+    cast->Update();
+
+
+    typedef itk::ImageFileWriter< OutputImageType > OutputImageFileWriterType;
+    OutputImageFileWriterType::Pointer writer = OutputImageFileWriterType::New();
 
     cout<<"Writing: "<<outputImageFilename<<endl;
     writer->SetFileName(outputImageFilename.c_str());
-    writer->SetInput(outputimg);
+    writer->SetInput(cast->GetOutput());
     writer->Update();
 
 
