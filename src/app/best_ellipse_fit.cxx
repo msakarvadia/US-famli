@@ -29,7 +29,7 @@ void BestEllipseFit::f(vnl_vector< double > const &ab, vnl_vector< double > &fx)
 
     for(int sample = 0; sample < m_Samples; sample++){
 
-        vnl_vector<double> xy(3, 1);
+        vnl_vector<double> xy(2, 1);
 
         double ratio = (double)sample/(m_Samples - 1);
         xy[0] = start_x * (1.0 - ratio) + end_x * ratio;

@@ -16,7 +16,7 @@
       <name>inputLabelFilename</name>
       <label>Input label image</label>
       <channel>input</channel>
-      <description>Input labeled image with 0 for background and objects with 1. There must be only two labeled regions corresponding to two calipers in the skull</description>
+      <description>Input labeled image with 0 for background and objects with 1. </description>
       <longflag>label</longflag>
     </image>
 
@@ -28,6 +28,15 @@
       <longflag>img</longflag>
     </image>
 
+    <boolean>
+      <name>caliperMode</name>
+      <label>Image calipers</label>
+      <channel>input</channel>
+      <description>There must be only two labeled regions corresponding to the two calipers that measure the biparietal diameter in the skull. Otherwise, the image should be a segmentation of the skull, usually the output of the segmentation of the neural network.</description>
+      <longflag>calipers</longflag>
+      <default>1</default>
+    </boolean>
+
   </parameters>
 
   <parameters>
@@ -38,9 +47,9 @@
       <name>outputFilename</name>
       <label>Output filename</label>
       <channel>output</channel>
-      <description>Write an output image</description>
+      <description>Write the outputs of the fit, image in (.nrrd) and json</description>
       <longflag>out</longflag>
-      <default>out.nrrd</default>
+      <default>out</default>
     </string>
 
   </parameters>
