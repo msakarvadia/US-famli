@@ -7,17 +7,31 @@ import tensorflow as tf
 import json
 import os
 import glob
+
 import base_nn
 
 class NN(base_nn.BaseNN):
 
-    def inference(self, data_tuple=None, images=None, keep_prob=1, is_training=False, ps_device="/cpu:0", w_device="/gpu:0"):
+    def set_data_description(self, json_filename=None, data_description=None):
+        super(NN, self).set_data_description(json_filename=json_filename, data_description=data_description)
 
-        if(data_tuple):
-            images = data_tuple[0]
+        if("data_keys" in self.data_description 
+            and len(self.data_description["data_keys"]) > 0
+            and "max" in self.data_description[self.data_description["data_keys"][1]]):
+
+            key_name_class = self.data_description["data_keys"][1]
+            self.num_classes = int(self.data_description[self.data_description["data_keys"][1]]["max"])
+        else:
+            print("Setting the number of classes to 2", file=sys.stderr)
+            self.num_classes = 2
+
+    def inference(self, data_tuple=None, images=None, keep_prob=1, is_training=False, ps_device="/cpu:0", w_device="/gpu:0"):
 
     #   input: tensor of images
     #   output: tensor of computed logits
+        if(data_tuple):
+            images = data_tuple[0]
+
         self.print_tensor_shape(images, "images")
 
         shape = tf.shape(images)
@@ -67,28 +81,32 @@ class NN(base_nn.BaseNN):
         conv7_0 = self.convolution2d(concat7_0, name="conv7_0_op", filter_shape=[5, 5, 16, 8], strides=[1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
         conv7_1 = self.convolution2d(conv7_0, name="conv7_1_op", filter_shape=[5, 5, 8, 8], strides=[1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
 
-        final = self.convolution2d(conv7_1, name="final", filter_shape=[1, 1, 8, 1], strides=[1,1,1,1], padding="SAME", activation=None, ps_device=ps_device, w_device=w_device)
+        final = self.convolution2d(conv7_1, name="final", filter_shape=[1, 1, 8, self.num_classes], strides=[1,1,1,1], padding="SAME", activation=tf.nn.sigmoid, ps_device=ps_device, w_device=w_device)
 
         return final
 
-    def metrics(self, logits, data_tuple, name='collection_metrics'):
+    def metrics(self, logits, data_tuple, name="metrics"):
 
-        labels = data_tuple[1]
+
         with tf.variable_scope(name):
+            labels = data_tuple[1]
+
             weight_map = None
 
             metrics_obj = {}
-            
-            metrics_obj["MEAN_ABSOLUTE_ERROR"] = tf.metrics.mean_absolute_error(predictions=logits, labels=labels, weights=weight_map, name='mean_absolute_error')
-            metrics_obj["MEAN_SQUARED_ERROR"] = tf.metrics.mean_squared_error(predictions=logits, labels=labels, weights=weight_map, name='mean_squared_error')
-            metrics_obj["ROOT_MEAN_SQUARED_ERROR"] = tf.metrics.root_mean_squared_error(predictions=logits, labels=labels, weights=weight_map, name='root_mean_squared_error')
-            
+
+            metrics_obj["ACCURACY"] = tf.metrics.accuracy(predictions=logits, labels=labels, weights=weight_map, name='accuracy')
+            metrics_obj["AUC"] = tf.metrics.auc(predictions=logits, labels=labels, weights=weight_map, name='auc')
+            metrics_obj["FN"] = tf.metrics.false_negatives(predictions=logits, labels=labels, weights=weight_map, name='false_negatives')
+            metrics_obj["FP"] = tf.metrics.false_positives(predictions=logits, labels=labels, weights=weight_map, name='false_positives')
+            metrics_obj["TN"] = tf.metrics.true_negatives(predictions=logits, labels=labels, weights=weight_map, name='true_negatives')
+            metrics_obj["TP"] = tf.metrics.true_positives(predictions=logits, labels=labels, weights=weight_map, name='true_positives')
             
             for key in metrics_obj:
                 tf.summary.scalar(key, metrics_obj[key][0])
 
             return metrics_obj
-
+            
 
     def training(self, loss, learning_rate, decay_steps, decay_rate):
         
@@ -112,7 +130,7 @@ class NN(base_nn.BaseNN):
 
         return train_op
 
-    def loss(self, logits, data_tuple, class_weights=None):
+    def loss(self, logits, data_tuple, images=None, class_weights=None):
         
         labels = data_tuple[1]
 
@@ -123,6 +141,9 @@ class NN(base_nn.BaseNN):
         batch_size = shape[0]
 
         logits_flat = tf.reshape(logits, [batch_size, -1])
-        labels_flat = tf.reshape(labels, [batch_size, -1])
+        labels_flat = tf.reshape(tf.cast(labels, tf.float32), [batch_size, -1])
 
-        return tf.losses.absolute_difference(predictions=logits_flat, labels=labels_flat)
+        intersection = 2.0 * tf.reduce_sum(logits_flat * labels_flat, axis=1) + 1e-7
+        denominator = tf.reduce_sum(logits_flat, axis=1) + tf.reduce_sum(labels_flat, axis=1) + 1e-7
+
+        return 1.0 - tf.reduce_mean(intersection / denominator)

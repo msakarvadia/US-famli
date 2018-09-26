@@ -13,7 +13,11 @@ print("Tensorflow version:", tf.__version__)
 
 parser = argparse.ArgumentParser(description='U network for segmentation', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
-parser.add_argument('--json', type=str, help='json file with the description of the inputs, generate it with tfRecords.py', required=True)
+in_group = parser.add_mutually_exclusive_group(required=True)
+  
+in_group.add_argument('--args', help='JSON file with arguments.', type=str)
+in_group.add_argument('--json', type=str, help='json file with the description of the inputs, generate it with tfRecords.py')
+
 parser.add_argument('--nn', type=str, help='Type of neural network to use', default='u_nn')
 parser.add_argument('--out', help='Output dirname for the model', default="./out")
 parser.add_argument('--model', help='Output modelname, the output name will be <out directory>/model-<num step>', default="model")
@@ -24,12 +28,14 @@ parser.add_argument('--decay_rate', help='decay rate, default=0.96', type=float,
 parser.add_argument('--decay_steps', help='decay steps, default=10000', type=int, default=1000)
 parser.add_argument('--batch_size', help='Batch size for evaluation', type=int, default=8)
 parser.add_argument('--num_epochs', help='Number of epochs', type=int, default=10)
+parser.add_argument('--buffer_size', help='Shuffle buffer size', type=int, default=1000)
 parser.add_argument('--ps_device', help='Process device', type=str, default='/cpu:0')
 parser.add_argument('--w_device', help='Worker device', type=str, default='/cpu:0')
 
 args = parser.parse_args()
 
 json_filename = args.json
+neural_network = args.nn
 outvariablesdirname = args.out
 modelname = args.model
 k_prob = args.keep_prob
@@ -38,35 +44,56 @@ decay_rate = args.decay_rate
 decay_steps = args.decay_steps
 batch_size = args.batch_size
 num_epochs = args.num_epochs
+buffer_size = args.buffer_size
 ps_device = args.ps_device
 w_device = args.w_device
-neural_network = args.nn
 
-nn = importlib.import_module(neural_network)
+if(args.args):
+  with open(args.args, "r") as jsf:
+    json_args = json.load(jsf)
+
+    json_filename = json_args["json_filename"] if json_args["json_filename"] else args.json
+    neural_network = json_args["nn"] if json_args["nn"] else args.nn
+    outvariablesdirname = json_args["out"] if json_args["out"] else args.out
+    modelname = json_args["model"] if json_args["model"] else args.model
+    k_prob = json_args["keep_prob"] if json_args["keep_prob"] else args.keep_prob
+    learning_rate = json_args["learning_rate"] if json_args["learning_rate"] else args.learning_rate
+    decay_rate = json_args["decay_rate"] if json_args["decay_rate"] else args.decay_rate
+    decay_steps = json_args["decay_steps"] if json_args["decay_steps"] else args.decay_steps
+    batch_size = json_args["batch_size"] if json_args["batch_size"] else args.batch_size
+    num_epochs = json_args["num_epochs"] if json_args["num_epochs"] else args.num_epochs
+    buffer_size = json_args["buffer_size"] if json_args["buffer_size"] else args.buffer_size
+    ps_device = json_args["ps_device"] if json_args["ps_device"] else args.ps_device
+    w_device = json_args["w_device"] if json_args["w_device"] else args.w_device
+
+
+nn = importlib.import_module(neural_network).NN()
 is_gan = "gan" in neural_network
 
+print('json', json_filename)
 print('neural_network', neural_network)
 if is_gan:
   print('using gan optimization scheme')
-print('json', json_filename)
+print('out', outvariablesdirname)
 print('keep_prob', k_prob)
 print('learning_rate', learning_rate)
 print('decay_rate', decay_rate)
 print('decay_steps', decay_steps)
 print('batch_size', batch_size)
 print('num_epochs', num_epochs)
+print('buffer_size', buffer_size)
 print('ps_device', ps_device)
 print('w_device', w_device)
-
 
 
 graph = tf.Graph()
 
 with graph.as_default():
 
+  nn.set_data_description(json_filename=json_filename)
   iterator = nn.inputs(batch_size=batch_size,
-    num_epochs=num_epochs,
-    json_filename=json_filename)
+    num_epochs=num_epochs, 
+    buffer_size=buffer_size)
 
   data_tuple = iterator.get_next()
   
@@ -167,7 +194,7 @@ with graph.as_default():
       saver.save(sess, outmodelname, global_step=step)
 
   else:
-    # THIS IS THE STANDARD OPIMIZATION SCHEME FOR NETWORKS SUCH AS UNET OR LABEL MAPS
+    # THIS IS THE STANDARD OPIMIZATION SCHEME FOR NETWORKS SUCH AS UNET, CLASSIFICATION OR LABEL MAPS
     y_conv = nn.inference(data_tuple, keep_prob=keep_prob, is_training=True, ps_device=ps_device, w_device=w_device)
     loss = nn.loss(y_conv, data_tuple)
 
@@ -185,7 +212,9 @@ with graph.as_default():
       saver = tf.train.Saver()
       # specify where to write the log files for import to TensorBoard
       now = datetime.now()
-      summary_writer = tf.summary.FileWriter(os.path.join(outvariablesdirname, modelname + "-" + now.strftime("%Y%m%d-%H%M%S")), sess.graph)
+
+      summary_path = os.path.join(outvariablesdirname, modelname + "-" + now.strftime("%Y%m%d-%H%M%S"))
+      summary_writer = tf.summary.FileWriter(summary_path, sess.graph)
 
       sess.run([iterator.initializer])
       step = 0
@@ -218,7 +247,15 @@ with graph.as_default():
         except tf.errors.OutOfRangeError:
           break
 
-      outmodelname = os.path.join(outvariablesdirname, modelname)
+      outmodelname = summary_path
       print('Step:', step)
       print('Saving model:', outmodelname)
       saver.save(sess, outmodelname, global_step=step)
+
+      with open(os.path.normpath(summary_path + "-" + str(step) + ".json"), "w") as f:
+        args_dict = vars(args)
+        args_dict["model"] = os.path.basename(outmodelname) + "-" + str(step)
+        args_dict["description"] = nn.get_data_description()
+        if 'args' in args_dict:
+          del args_dict['args']
+        f.write(json.dumps(args_dict))

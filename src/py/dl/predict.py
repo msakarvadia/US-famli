@@ -10,38 +10,40 @@ import json
 import glob
 import itk
 import sys
+import csv
 
 print("Tensorflow version:", tf.__version__)
 
 parser = argparse.ArgumentParser(description='U net segmentation', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
-
 in_group = parser.add_mutually_exclusive_group(required=True)
-  
 in_group.add_argument('--img', type=str, help='Input image for prediction')
 in_group.add_argument('--dir', type=str, help='Directory with images for prediction')
 
-parser.add_argument('--out', type=str, help='Output image or directory. If dir flag is used the output image name will be the <Directory set in out flag>/<imgage filename in directory dir>', default="./out.nrrd")
+parser.add_argument('--json', help='JSON file with model description, created by train.py', required=True)
+
+parser.add_argument('--out', type=str, help='Output image, csv, or directory. If --dir flag is used the output image name will be the <Directory set in out flag>/<imgage filename in directory dir>', default="out")
+parser.add_argument('--out_ext', type=str, help='Output extension for images', default='.nrrd')
 parser.add_argument('--ow', type=int, help='Overwrite outputs', default=1)
 parser.add_argument('--resize', nargs="+", type=int, help='Resize images during prediction, useful when doing whole directories with images of diferent sizes. This is needed to set the value of the placeholder for tensorflow. e.x. 1500 1500. The image will be resized for the prediction but the original image size will be stored. Do not include the channels/pixel components in the resize parameters', default=None)
-parser.add_argument('--model', help='Input modelname', required=True)
-parser.add_argument('--nn', type=str, help='Type of neural network to use', default='u_nn')
-parser.add_argument('--num_labels', help='Number of labels for the softmax output', type=int, default=2)
 parser.add_argument('--ps_device', help='Process device', type=str, default='/cpu:0')
 parser.add_argument('--w_device', help='Worker device', type=str, default='/cpu:0')
 
 args = parser.parse_args()
 
-
-model_name = args.model
-neural_network = args.nn
+json_model_name = args.json
 out_name = args.out
+out_ext = args.out_ext
 resize_shape = args.resize
-num_labels = args.num_labels
 ps_device = args.ps_device
 w_device = args.w_device
 
-print('neural_network', neural_network)
+with open(json_model_name, "r") as f:
+  model_description = json.load(f)
+  model_name = os.path.join(os.path.dirname(json_model_name), model_description["model"])
+  neural_network = model_description["nn"]
+
+print('json', json_model_name)
 print('model_name', model_name)
 print('neural_network', neural_network)
 is_gan = "gan" in neural_network
@@ -51,16 +53,29 @@ print('ps_device', ps_device)
 print('w_device', w_device)
 print('ow', args.ow)
 print('out', out_name)
+print('out_ext', out_ext)
 
-nn = importlib.import_module(neural_network)
+nn = importlib.import_module(neural_network).NN()
+
+if("description" in model_description):
+  nn.set_data_description(data_description=model_description["description"])
+
+class_prediction = False
+class_prediction_arr = []
+if("description" in model_description and "enumerate" in model_description["description"]):
+  class_prediction = True
+  class_obj = {}
+  enumerate_obj = model_description["description"][model_description["description"]["enumerate"]]["class"]
+  for key in enumerate_obj:
+    class_obj[enumerate_obj[key]] = key    
 
 filenames = []
 
 if(args.img):
-  print('imgage_name', args.img)
+  print('image_name', args.img)
   fobj = {}
   fobj["img"] = args.img
-  fobj["out"] = args.out
+  fobj["out"] = out_name
   if args.ow or not os.path.exists(fobj["out"]):
     filenames.append(fobj)
 elif(args.dir):
@@ -72,11 +87,13 @@ elif(args.dir):
       fobj = {}
       fobj["img"] = img
 
-      image_dir_filename = img.replace(args.dir, '')
-      fobj["out"] = os.path.normpath("/".join([args.out, image_dir_filename]))
+      if(not class_prediction):
+        image_dir_filename = img.replace(args.dir, '')
+        image_dir_filename = os.path.splitext(image_dir_filename)[0] +  out_ext
+        fobj["out"] = os.path.normpath("/".join([out_name, image_dir_filename]))
 
-      if not os.path.exists(os.path.dirname(fobj["out"])):
-        os.makedirs(os.path.dirname(fobj["out"]))
+        if not os.path.exists(os.path.dirname(fobj["out"])):
+          os.makedirs(os.path.dirname(fobj["out"]))
 
       if args.ow or not os.path.exists(fobj["out"]):
         filenames.append(fobj)
@@ -85,42 +102,53 @@ if len(filenames) == 0:
   print("No images found with extensions", [".nrrd", ".nii", ".nii.gz", ".mhd", ".dcm", ".jpg", ".png"], file=sys.stderr)
   sys.exit()
 
-components_pixel = 1
-try:
-  InputType = itk.Image[itk.US,2]
-  img_read = itk.ImageFileReader[InputType].New(FileName=filenames[0]["img"])
+def image_read(filename):
+  img_read = itk.ImageFileReader.New(FileName=filename)
   img_read.Update()
   img = img_read.GetOutput()
-  components_pixel = img.GetNumberOfComponentsPerPixel()
+  
+  img_np = itk.GetArrayViewFromImage(img).astype(float)
+
+  # Put the shape of the image in the json object if it does not exists. This is done for global information
+  tf_img_shape = list(img_np.shape)
+  if(tf_img_shape[0] == 1):
+    # If the first component is 1 we remove it. It means that is a 2D image but was saved as 3D
+    tf_img_shape = tf_img_shape[1:]
+
+  # This is the number of channels, if the number of components is 1, it is not included in the image shape
+  # If it has more than one component, it is included in the shape, that's why we have to add the 1
+  if(img.GetNumberOfComponentsPerPixel() == 1):
+    tf_img_shape = tf_img_shape + [1]
+
+  tf_img_shape = [1] + tf_img_shape
+
+  return img, img_np, tf_img_shape
+
+try:
+  _itkimg, _imgnp, tf_img_shape = image_read(filenames[0]["img"])
 except Exception as e:
-  print("Error predicting image", filenames[0].img, e, file=sys.stderr)
+  print("Error reading image to get shape info for prediction", filenames[0]["img"], e, file=sys.stderr)
   sys.exit()
 
-if(resize_shape is None):
-  img_np = itk.GetArrayViewFromImage(img)
-  if(components_pixel == 1):
-    img_shape = (1,) + img_np.shape + (1,)
-  else:
-    img_shape = (1,) + img_np.shape 
-else:
+if(resize_shape):
   resize_shape = tuple(resize_shape)
-  img_shape = (1,) + resize_shape + (components_pixel,)
+  tf_img_shape = (1,) + resize_shape + (tf_img_shape[-1],)
 
 graph = tf.Graph()
 
 with graph.as_default():
 
-  x = tf.placeholder(tf.float32,shape=img_shape)
+  x = tf.placeholder(tf.float32,shape=tf_img_shape)
   
   keep_prob = tf.placeholder(tf.float32)
 
   if is_gan:
     with tf.variable_scope("generator"):
-      y_conv = nn.inference(x, keep_prob=1.0, is_training=False, ps_device=ps_device, w_device=w_device)
+      y_conv = nn.inference(images=x, keep_prob=1.0, is_training=False, ps_device=ps_device, w_device=w_device)
   else:
-    y_conv = nn.inference(x, keep_prob=1.0, is_training=False, ps_device=ps_device, w_device=w_device)
+    y_conv = nn.inference(images=x, keep_prob=1.0, is_training=False, ps_device=ps_device, w_device=w_device)
 
-  label = y_conv
+  label = nn.predict(y_conv)
 
   with tf.Session() as sess:
 
@@ -135,56 +163,82 @@ with graph.as_default():
       print("Predicting:", img_obj["img"])
 
       try:
-        img_read = itk.ImageFileReader[InputType].New(FileName=img_obj["img"])
-        img_read.Update()
-        img = img_read.GetOutput()
 
-        img_np = itk.GetArrayViewFromImage(img)
-        img_shape_current = img_np.shape
+        img, img_np, img_shape_current = image_read(img_obj["img"])
 
         if(resize_shape):
           
-          img_np_x = np.zeros(img_shape)
-
-          if(img.GetNumberOfComponentsPerPixel() == 1):
-            img_reshape_current = (1,) + img_shape_current + (1,)
-          else:
-            img_reshape_current = (1,) + img_shape_current
+          img_np_x = np.zeros(tf_img_shape)
 
           prediction_shape = []
-          for r_s, i_s in zip(img_shape, img_reshape_current):
+          for r_s, i_s in zip(tf_img_shape, img_shape_current):
             if(r_s >= i_s):
               prediction_shape.append("0:" + str(i_s))
             else:
               print("The resize shape is smaller than the current image shape...", img_obj["img"], file=sys.stderr)
               prediction_shape.append("0:")
 
-          assign_img = "img_np_x[" + ",".join(prediction_shape) + "]=np.reshape(img_np, img_reshape_current)"
+          assign_img = "img_np_x[" + ",".join(prediction_shape) + "]=np.reshape(img_np, img_shape_current)"
           exec(assign_img)
-
         else:
-          img_np_x = np.reshape(img_np, img_shape)
+          img_np_x = np.reshape(img_np, tf_img_shape)
 
         label_map = sess.run([label], feed_dict={x: img_np_x.astype(np.float32)})
+        label_map = np.array(label_map)[0]
 
-        if(resize_shape):
-          label_map = np.reshape(label_map, img_shape)
-          assign_img = "label_map=label_map[" + ",".join(prediction_shape) + "]"
-          print(assign_img)
-          exec(assign_img)
+        if(class_prediction):
+          class_prediction_arr.append({
+            "img": img_obj["img"],
+            "class": class_obj[label_map[0][0]],
+            "prob": label_map[1][0]
+            })
+        else:
+          if(resize_shape):
+            assign_img = "label_map=label_map[" + ",".join(prediction_shape) + "]"
+            exec(assign_img)
 
-        label_map = np.reshape(label_map, img_shape_current)
-        label_map = np.absolute(label_map)
-        label_map = label_map.astype(np.uint16)
+          #THE NUMBER OF CHANNELS OF THE OUTPUT ARE GIVEN BY THE NEURAL NET
+          label_map_reshape = list(img_np.shape)
+          if(img.GetNumberOfComponentsPerPixel() > 1):
+            label_map_reshape[-1] = np.array(label_map).shape[-1]
+          
+          
+          label_map = np.reshape(label_map, label_map_reshape)
+          label_map = np.absolute(label_map)
+          label_map = np.around(label_map).astype(np.uint16)
 
-        img_np.setfield(label_map,img_np.dtype)
+          Dimension = len(img.GetLargestPossibleRegion().GetSize())
+          PixelType = itk.ctype('unsigned short')
+          OutputImageType = itk.Image[PixelType, Dimension]
 
-        print("Writing:", img_obj["out"])
-        writer = itk.ImageFileWriter.New(FileName=img_obj["out"], Input=img)
-        writer.Update()
+          out_img = OutputImageType.New()
+
+          out_img.SetRegions(img.GetLargestPossibleRegion())
+          out_img.SetDirection(img.GetDirection())
+          out_img.SetOrigin(img.GetOrigin())
+          out_img.SetSpacing(img.GetSpacing())
+          out_img.Allocate()
+
+          out_img_np = itk.GetArrayViewFromImage(out_img)
+
+          out_img_np.setfield(np.reshape(label_map, out_img_np.shape), out_img_np.dtype)
+
+          print("Writing:", img_obj["out"])
+          writer = itk.ImageFileWriter.New(FileName=img_obj["out"], Input=out_img)
+          writer.Update()
+
       except Exception as e:
-        print("Error predicting image", e)
-        print("Continuing...")
+        print("Error predicting image:", e, file=sys.stderr)
+        print("Continuing...", file=sys.stderr)
+
+    if(class_prediction):
+      with open(out_name, 'w') as csvfile:
+        fieldnames = ['img', 'class', 'prob']
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+
+        writer.writeheader()
+        for cp in class_prediction_arr:
+          writer.writerow(cp)
 
     print("jk, bye")
         
