@@ -7,8 +7,7 @@ import tensorflow as tf
 import json
 import os
 import glob
-
-import base_nn
+from . import base_nn
 
 class NN(base_nn.BaseNN):
 
@@ -78,10 +77,10 @@ class NN(base_nn.BaseNN):
         
         concat7_0 = tf.concat([up_conv6_0, conv1_1], -1)
 
-        conv7_0 = self.convolution2d(concat7_0, name="conv7_0_op", filter_shape=[5, 5, 16, 8], strides=[1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
-        conv7_1 = self.convolution2d(conv7_0, name="conv7_1_op", filter_shape=[5, 5, 8, 8], strides=[1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
+        conv7_0 = self.convolution2d(concat7_0, name="conv7_0_op", filter_shape=[5, 5, 16, 16], strides=[1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
+        conv7_1 = self.convolution2d(conv7_0, name="conv7_1_op", filter_shape=[5, 5, 16, 16], strides=[1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
 
-        final = self.convolution2d(conv7_1, name="final", filter_shape=[1, 1, 8, self.num_classes], strides=[1,1,1,1], padding="SAME", activation=tf.nn.sigmoid, ps_device=ps_device, w_device=w_device)
+        final = self.convolution2d(conv7_1, name="final", filter_shape=[1, 1, 16, self.num_classes], strides=[1,1,1,1], padding="SAME", activation=tf.nn.sigmoid, ps_device=ps_device, w_device=w_device)
 
         return final
 
@@ -90,17 +89,17 @@ class NN(base_nn.BaseNN):
 
         with tf.variable_scope(name):
             labels = data_tuple[1]
-
-            weight_map = None
+            labels = tf.one_hot(tf.cast(labels, tf.int32), self.num_classes)
+            labels = tf.reshape(labels, tf.shape(logits))
 
             metrics_obj = {}
 
-            metrics_obj["ACCURACY"] = tf.metrics.accuracy(predictions=logits, labels=labels, weights=weight_map, name='accuracy')
-            metrics_obj["AUC"] = tf.metrics.auc(predictions=logits, labels=labels, weights=weight_map, name='auc')
-            metrics_obj["FN"] = tf.metrics.false_negatives(predictions=logits, labels=labels, weights=weight_map, name='false_negatives')
-            metrics_obj["FP"] = tf.metrics.false_positives(predictions=logits, labels=labels, weights=weight_map, name='false_positives')
-            metrics_obj["TN"] = tf.metrics.true_negatives(predictions=logits, labels=labels, weights=weight_map, name='true_negatives')
-            metrics_obj["TP"] = tf.metrics.true_positives(predictions=logits, labels=labels, weights=weight_map, name='true_positives')
+            metrics_obj["ACCURACY"] = tf.metrics.accuracy(predictions=logits, labels=labels, name='accuracy')
+            # metrics_obj["AUC"] = tf.metrics.auc(predictions=logits, labels=labels, name='auc')
+            metrics_obj["FN"] = tf.metrics.false_negatives(predictions=logits, labels=labels, name='false_negatives')
+            metrics_obj["FP"] = tf.metrics.false_positives(predictions=logits, labels=labels, name='false_positives')
+            metrics_obj["TN"] = tf.metrics.true_negatives(predictions=logits, labels=labels, name='true_negatives')
+            metrics_obj["TP"] = tf.metrics.true_positives(predictions=logits, labels=labels, name='true_positives')
             
             for key in metrics_obj:
                 tf.summary.scalar(key, metrics_obj[key][0])
@@ -133,15 +132,30 @@ class NN(base_nn.BaseNN):
     def loss(self, logits, data_tuple, images=None, class_weights=None):
         
         labels = data_tuple[1]
+        labels = tf.one_hot(tf.cast(labels, tf.int32), self.num_classes)
+        labels = tf.reshape(labels, tf.shape(logits))
 
         self.print_tensor_shape( logits, 'logits shape')
         self.print_tensor_shape( labels, 'labels shape')
 
+        logits_perm = tf.transpose(logits, perm=[3, 0, 1, 2]) 
+        labels_perm = tf.transpose(labels, perm=[3, 0, 1, 2]) 
+
+        self.print_tensor_shape( logits_perm, 'logits_perm shape')
+        self.print_tensor_shape( labels_perm, 'labels_perm shape')
+
+        return tf.reduce_sum(tf.map_fn(lambda num_class: self.iou(logits_perm[num_class], labels_perm[num_class]), tf.range(self.num_classes), dtype=tf.float32))
+
+    def iou(self, logits, labels):
+
+        self.print_tensor_shape( logits, 'logits iou shape')
+        self.print_tensor_shape( labels, 'labels iou shape')
+
         shape = tf.shape(logits)
         batch_size = shape[0]
 
+        labels_flat = tf.reshape(labels, [batch_size, -1])
         logits_flat = tf.reshape(logits, [batch_size, -1])
-        labels_flat = tf.reshape(tf.cast(labels, tf.float32), [batch_size, -1])
 
         intersection = 2.0 * tf.reduce_sum(logits_flat * labels_flat, axis=1) + 1e-7
         denominator = tf.reduce_sum(logits_flat, axis=1) + tf.reduce_sum(labels_flat, axis=1) + 1e-7

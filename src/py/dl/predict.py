@@ -55,7 +55,7 @@ print('ow', args.ow)
 print('out', out_name)
 print('out_ext', out_ext)
 
-nn = importlib.import_module(neural_network).NN()
+nn = importlib.import_module("nn." + neural_network).NN()
 
 if("description" in model_description):
   nn.set_data_description(data_description=model_description["description"])
@@ -67,7 +67,9 @@ if("description" in model_description and "enumerate" in model_description["desc
   class_obj = {}
   enumerate_obj = model_description["description"][model_description["description"]["enumerate"]]["class"]
   for key in enumerate_obj:
-    class_obj[enumerate_obj[key]] = key    
+    class_obj[enumerate_obj[key]] = key 
+
+prediction_arr = []
 
 filenames = []
 
@@ -192,7 +194,7 @@ with graph.as_default():
             "class": class_obj[label_map[0][0]],
             "prob": label_map[1][0]
             })
-        else:
+        elif(nn.prediction_type() == "image"):
           if(resize_shape):
             assign_img = "label_map=label_map[" + ",".join(prediction_shape) + "]"
             exec(assign_img)
@@ -227,6 +229,14 @@ with graph.as_default():
           writer = itk.ImageFileWriter.New(FileName=img_obj["out"], Input=out_img)
           writer.Update()
 
+        elif(nn.prediction_type() == "scalar"):
+          prediction_arr.append({
+            "img": img_obj["img"],
+            "scalar": label_map[0].tolist()
+            })
+        else:
+          print("I don't know what to do with the result, 'ill just printed")
+
       except Exception as e:
         print("Error predicting image:", e, file=sys.stderr)
         print("Continuing...", file=sys.stderr)
@@ -239,6 +249,9 @@ with graph.as_default():
         writer.writeheader()
         for cp in class_prediction_arr:
           writer.writerow(cp)
+
+    if(prediction_arr):
+      print(prediction_arr)
 
     print("jk, bye")
         

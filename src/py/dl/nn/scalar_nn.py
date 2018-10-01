@@ -15,17 +15,7 @@ class NN(base_nn.BaseNN):
     def set_data_description(self, json_filename=None, data_description=None):
         super(NN, self).set_data_description(json_filename=json_filename, data_description=data_description)
 
-        if("data_keys" in self.data_description 
-            and len(self.data_description["data_keys"]) > 0
-            and "num_class" in self.data_description[self.data_description["data_keys"][1]]):
-
-            key_name_class = self.data_description["data_keys"][1]
-            self.num_classes = self.data_description[key_name_class]["num_class"]
-        else:
-            print("You may want to call the tfRecords.py script with the flag --enumerate", key_name_class, file=sys.stderr)
-            print("This option will count the number of classes in your data and enumerate accordingly", file=sys.stderr)
-            print("Setting the number of classes to 2", file=sys.stderr)
-            self.num_classes = 2
+        self.num_scalars = 1
 
     def inference(self, data_tuple=None, images=None, keep_prob=1, is_training=False, ps_device="/cpu:0", w_device="/gpu:0"):
 
@@ -82,7 +72,7 @@ class NN(base_nn.BaseNN):
         matmul_9_0 = self.matmul(pool8_0_op, 1024, name='matmul_9_0_op', activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
         matmul_9_1 = self.matmul(matmul_9_0, 128, name='matmul_9_1_op', activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
 
-        final = self.matmul(matmul_9_1, self.num_classes, name='final_op', activation=None, ps_device=ps_device, w_device=w_device)
+        final = self.matmul(matmul_9_1, self.num_scalars, name='final_op', activation=None, ps_device=ps_device, w_device=w_device)
 
         return final
 
@@ -92,21 +82,17 @@ class NN(base_nn.BaseNN):
         with tf.variable_scope(name):
             weight_map = None
 
-            logits_auc = tf.nn.softmax(logits)
-            logits = tf.argmax(logits_auc, axis=1)
-
-            labels_auc = tf.one_hot(labels, self.num_classes, axis=1)
-
             self.print_tensor_shape( logits, 'logits metrics shape')
             self.print_tensor_shape( labels, 'labels metrics shape')
             
             metrics_obj = {}
-            metrics_obj["ACCURACY"] = tf.metrics.accuracy(predictions=logits, labels=labels, weights=weight_map, name='accuracy')
-            metrics_obj["AUC"] = tf.metrics.auc(predictions=logits_auc, labels=labels_auc, weights=weight_map, name='auc')
-            metrics_obj["FN"] = tf.metrics.false_negatives(predictions=logits, labels=labels, weights=weight_map, name='false_negatives')
-            metrics_obj["FP"] = tf.metrics.false_positives(predictions=logits, labels=labels, weights=weight_map, name='false_positives')
-            metrics_obj["TN"] = tf.metrics.true_negatives(predictions=logits, labels=labels, weights=weight_map, name='true_negatives')
-            metrics_obj["TP"] = tf.metrics.true_positives(predictions=logits, labels=labels, weights=weight_map, name='true_positives')
+            metrics_obj["MEAN_ABSOLUTE_ERROR"] = tf.metrics.mean_absolute_error(predictions=logits, labels=labels, weights=weight_map, name='mean_absolute_error')
+            metrics_obj["MEAN_SQUARED_ERROR"] = tf.metrics.mean_squared_error(predictions=logits, labels=labels, weights=weight_map, name='mean_squared_error')
+            # metrics_obj["AUC"] = tf.metrics.auc(predictions=logits_auc, labels=labels_auc, weights=weight_map, name='auc')
+            # metrics_obj["FN"] = tf.metrics.false_negatives(predictions=logits, labels=labels, weights=weight_map, name='false_negatives')
+            # metrics_obj["FP"] = tf.metrics.false_positives(predictions=logits, labels=labels, weights=weight_map, name='false_positives')
+            # metrics_obj["TN"] = tf.metrics.true_negatives(predictions=logits, labels=labels, weights=weight_map, name='true_negatives')
+            # metrics_obj["TP"] = tf.metrics.true_positives(predictions=logits, labels=labels, weights=weight_map, name='true_positives')
             
             for key in metrics_obj:
                 tf.summary.scalar(key, metrics_obj[key][0])
@@ -143,8 +129,7 @@ class NN(base_nn.BaseNN):
         self.print_tensor_shape( logits, 'logits shape')
         self.print_tensor_shape( labels, 'labels shape')
 
-        return tf.losses.sparse_softmax_cross_entropy(logits=logits, labels=labels)
+        return tf.losses.absolute_difference(predictions=logits, labels=labels)
 
-    def predict(self, logits):
-        soft_logits = tf.nn.softmax(logits)
-        return tf.argmax(soft_logits, axis=1), soft_logits
+    def prediction_type(self):
+        return "scalar"

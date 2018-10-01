@@ -98,7 +98,6 @@ def main(args):
 		print("Enumerate classes...")
 		for fobj in csv_rows:
 			class_name = fobj[args.enumerate]
-			print("Enumerate", class_name)
 			if os.path.exists(class_name):
 				#Count number of labels in image
 				img_label_read = itk.ImageFileReader.New(FileName=class_name)

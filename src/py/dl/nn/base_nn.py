@@ -196,3 +196,5 @@ class BaseNN:
         raise NotImplementedError
     def predict(self, logits):
         return logits
+    def prediction_type(self):
+        return "image"

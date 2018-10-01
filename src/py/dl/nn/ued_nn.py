@@ -7,7 +7,7 @@ import tensorflow as tf
 import json
 import os
 import glob
-import base_nn
+from . import base_nn
 
 class NN(base_nn.BaseNN):
 

@@ -67,7 +67,7 @@ if(args.args):
     w_device = json_args["w_device"] if json_args["w_device"] else args.w_device
 
 
-nn = importlib.import_module(neural_network).NN()
+nn = importlib.import_module("nn." + neural_network).NN()
 is_gan = "gan" in neural_network
 
 print('json', json_filename)
