@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<executable>
+  <category>Fitting</category>
+  <title>Fit an ellipse to the skull in US image. The skull must be in hight intensity</title>
+  <version>1.0.0</version>
+  <description>
+    Using two points given by the calipers, fits an skull to the US image
+  </description>
+  <contributor>Juan Carlos Prieto</contributor>
+
+  <parameters>
+    <label>Input parameters</label>
+    <description>Input parameters</description>
+
+    <image>
+      <name>inputLabelFilename</name>
+      <label>Input label image</label>
+      <channel>input</channel>
+      <description>Input labeled image with 0 for background and objects with 1. </description>
+      <longflag>label</longflag>
+    </image>
+
+  </parameters>
+
+  <parameters>
+    <label>Ouput parameters</label>
+    <description>Output parameters</description>
+
+    <string>
+      <name>outputFilename</name>
+      <label>Output filename</label>
+      <channel>output</channel>
+      <description>Write the outputs of the fit, image in (.nrrd) and json</description>
+      <longflag>out</longflag>
+      <default>out</default>
+    </string>
+
+  </parameters>
+</executable>
