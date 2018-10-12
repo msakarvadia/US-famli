@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<executable>
+  <category>Transform</category>
+  <title></title>
+  <version>1.0.0</version>
+  <description>
+    Flips an image in x or y axes and saves the transformation. Use arrows to flip the image in the x, y axis. 
+  </description>
+  <contributor>Juan Carlos Prieto</contributor>
+
+  <parameters>
+    <label>Input parameters</label>
+    <description>Input parameters</description>
+
+    <image>
+      <name>inputImageFilename</name>
+      <label>Input image to be transformed</label>
+      <channel>input</channel>
+      <description>Input grayscale image of US </description>
+      <longflag>img</longflag>
+    </image>
+
+  </parameters>
+
+  <parameters>
+    <label>Ouput parameters</label>
+    <description>Output parameters</description>
+
+    <string>
+      <name>outputFilename</name>
+      <label>Output filename</label>
+      <channel>output</channel>
+      <description>Write the transformed image and transformation</description>
+      <longflag>out</longflag>
+      <default>out</default>
+    </string>
+
+  </parameters>
+</executable>
