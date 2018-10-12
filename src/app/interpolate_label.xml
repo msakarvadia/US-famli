@@ -4,7 +4,7 @@
   <title>Find image with a mask</title>
   <version>1.0.0</version>
   <description>
-    find the structuring element in the image, e.x., text
+    Create an interpolated line between two labels.
   </description>
   <contributor>Juan Carlos Prieto</contributor>
 
