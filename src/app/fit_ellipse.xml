@@ -20,22 +20,32 @@
       <longflag>label</longflag>
     </image>
 
-     <image>
-      <name>inputFilename</name>
-      <label>Input US image</label>
-      <channel>input</channel>
-      <description>Input US image like biparietal diameter or head circumference</description>
-      <longflag>img</longflag>
-    </image>
-
     <boolean>
       <name>caliperMode</name>
-      <label>Image calipers</label>
+      <label>Caliper mode</label>
       <channel>input</channel>
       <description>There must be only two labeled regions corresponding to the two calipers that measure the biparietal diameter in the skull. Otherwise, the image should be a segmentation of the skull, usually the output of the segmentation of the neural network.</description>
-      <longflag>calipers</longflag>
+      <longflag>caliperMode</longflag>
       <default>1</default>
     </boolean>
+
+    <boolean>
+      <name>circleMode</name>
+      <label>Fit a circle instead of ellipse</label>
+      <channel>input</channel>
+      <description>If circle mode, both radius of the ellipse will be the same. If false, the points connecting the two calipers is the minor radius.</description>
+      <longflag>circleMode</longflag>
+      <default>0</default>
+    </boolean>
+
+    <double>
+      <name>majorRadiusFactor</name>
+      <label>Major radius factor coefficient</label>
+      <channel>input</channel>
+      <description>This is the scaling factor for the major radius, the minor radius is the line between the two calipers</description>
+      <longflag>majorRadiusFactor</longflag>
+      <default>1.2</default>
+    </double>
 
   </parameters>
 

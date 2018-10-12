@@ -123,17 +123,6 @@ int main (int argc, char * argv[]){
 
     if(caliperMode){
         cout << "Fitting using calipers..."<<endl;
-        if(inputFilename.compare("") == 0){
-            commandLine.getOutput()->usage(commandLine);
-            return EXIT_FAILURE;
-        }
-        cout << "The input image is: " << inputFilename << endl;
-
-        reader = InputImageFileReaderType::New();
-        reader->SetFileName(inputFilename);
-        reader->Update();
-
-        InputImagePointerType image = reader->GetOutput();
 
         typedef itk::ConnectedComponentImageFilter <InputImageType, InputImageType > ConnectedComponentImageFilterType;
 
@@ -153,13 +142,6 @@ int main (int argc, char * argv[]){
         cout << endl;
 
         typedef itk::ContinuousIndex<double, dimension> ContinuousIndexType;
-
-        // typedef itk::NeighborhoodIterator<InputImageType> InputImageNeighborhoodIteratorType;
-        // InputImageNeighborhoodIteratorType::RadiusType radius;
-        // radius[0] = radiusVector[0];
-        // radius[1] = radiusVector[1];
-        // radius[2] = radiusVector[2];
-
         
 
         if(labelstats->GetNumberOfLabels() > 3){
@@ -215,7 +197,12 @@ int main (int argc, char * argv[]){
                     //find radius a this is the initial guess
                     vnl_vector<double> ab(2);
                     ab[0] = v1.magnitude();
-                    ab[1] = ab[0]*1.2;
+                    if(circleMode){
+                        ab[1] = ab[0];
+                    }else{
+                        ab[1] = ab[0]*majorRadiusFactor;
+                    }
+                    
 
                     v1 = v1.normalize();
 
@@ -231,20 +218,8 @@ int main (int argc, char * argv[]){
                     transform[1][1] = dot_product(v1, v2);
 
                     vnl_matrix<double> inverse_transform = vnl_matrix_inverse<double>(transform);
-
-                    int samples = 100;
-                    BestEllipseFit bestfit = BestEllipseFit(samples);
-                    bestfit.SetInput(image);
-                    bestfit.SetTransform(transform);
-
-                    vnl_levenberg_marquardt levenberg(bestfit);
-
+                    
                     cout<<ab<<endl;
-                    levenberg.minimize(ab);
-                    cout<<ab<<endl;
-                    InterpolateImagePointerType interpolate = InterpolateImageType::New();
-                    interpolate->SetInputImage(image);
-
 
                     itout.GoToBegin();
 
@@ -255,6 +230,7 @@ int main (int argc, char * argv[]){
                         xy[0] = xy_index[0];
                         xy[1] = xy_index[1];
 
+                        xy -= center_vect;
                         xy = inverse_transform*xy;
                         // vnl_vector<double> xy(3, 1);
                         // xy[0] = start_x * (1.0 - ratio) + end_x * ratio;
@@ -271,6 +247,14 @@ int main (int argc, char * argv[]){
                 }
             }
         }
+
+        cout<<"Writing: "<<outputFilename<<endl;
+
+        InputLabelImageFileWriterType::Pointer writer = InputLabelImageFileWriterType::New();
+        writer->SetFileName(outputFilename);
+        writer->SetInput(outimg);
+        writer->Update();
+
     }else{
 
         LabelGeometryImageFilterType::Pointer labelGeometryImageFilter = LabelGeometryImageFilterType::New();
