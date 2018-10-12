@@ -26,6 +26,7 @@ parser.add_argument('--keep_prob', help='The probability that each element is ke
 parser.add_argument('--learning_rate', help='Learning rate, default=1e-5', type=float, default=1e-5)
 parser.add_argument('--decay_rate', help='decay rate, default=0.96', type=float, default=0.96)
 parser.add_argument('--decay_steps', help='decay steps, default=10000', type=int, default=1000)
+parser.add_argument('--staircase', help='staircase decay', type=bool, default=False)
 parser.add_argument('--batch_size', help='Batch size for evaluation', type=int, default=8)
 parser.add_argument('--num_epochs', help='Number of epochs', type=int, default=10)
 parser.add_argument('--buffer_size', help='Shuffle buffer size', type=int, default=1000)
@@ -42,6 +43,7 @@ k_prob = args.keep_prob
 learning_rate = args.learning_rate
 decay_rate = args.decay_rate
 decay_steps = args.decay_steps
+staircase = args.staircase
 batch_size = args.batch_size
 num_epochs = args.num_epochs
 buffer_size = args.buffer_size
@@ -200,7 +202,7 @@ with graph.as_default():
 
     tf.summary.scalar("loss", loss)
 
-    train_step = nn.training(loss, learning_rate, decay_steps, decay_rate)
+    train_step = nn.training(loss, learning_rate, decay_steps, decay_rate, staircase)
 
     metrics_eval = nn.metrics(y_conv, data_tuple)
 
@@ -249,7 +251,7 @@ with graph.as_default():
 
       outmodelname = summary_path
       print('Step:', step)
-      print('Saving model:', outmodelname)
+      print('Saving model:', outmodelname + "-" + str(step))
       saver.save(sess, outmodelname, global_step=step)
 
       with open(os.path.normpath(summary_path + "-" + str(step) + ".json"), "w") as f:
