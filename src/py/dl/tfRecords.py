@@ -11,6 +11,7 @@ import csv
 import uuid
 from collections import namedtuple
 import nrrd3D_2D
+import tfRecords_split
 
 def _int64_feature(value):
 	if not isinstance(value, list):
@@ -52,6 +53,9 @@ def main(args):
 		for row in csv_reader:
 			# If we need to slice the images, save 2D slices with the same dimensions
 			if args.slice:
+
+				obj["slice"] = True
+
 				slice_imgs = []
 				slice_csv_headers = []
 
@@ -249,6 +253,17 @@ def main(args):
 			for row in csv_rows:
 				writer.writerow(row)
 
+	if(args.split > 0 and args.split < 1):
+		# We generate an object with the corresponding parameters
+		split_obj = {}
+		split_obj["json"] = outjson
+		split_obj["split"] = args.split
+
+		# We convert the dictionary to a namedtuple, a.k.a, python object, i.e., argparse object
+		split_args = namedtuple("Split", split_obj.keys())(*split_obj.values())
+		# Call the main of the script
+		tfRecords_split.main(split_args)
+
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser(description='Writes data to tfrecords format using a CSV file description as input and creates a JSON file with a description. The column headers are used as keys to store in the tfRecord. a row may contain image filenames, categories or other information to save in tfRecords format. If an image column is found, the maximum pixel value for each image is calulated and written into the json file. Additionally, it will save a new csv file indicating which tfRecord corresponds to the row.')
 	
@@ -256,6 +271,7 @@ if __name__ == "__main__":
 	parser.add_argument('--enumerate', type=str, default=None, help='Column name in CSV. If you are storing a label or category to perform a classification task. If it is an image, it will read the FIRST image in your csv and extract the existing labels.')
 	parser.add_argument('--slice', type=bool, default=False, help="If it is a 3D image, saves slices in all the major axis and the stores them as tfRecords")
 	parser.add_argument('--out', type=str, default="./out", help="Output directory")
+	parser.add_argument('--split', type=float, default=0, help="Split the data for evaluation. [0-1], 0=no split")
 
 	args = parser.parse_args()
 
