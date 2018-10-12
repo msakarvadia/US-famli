@@ -5,17 +5,19 @@ import numpy as np
 import uuid
 import sys
 import csv
+import json
 
 def main(args):
 	
 	imgs_arr = []
+	imgs_arr_description = []
 	
 	csv_headers = []
 	if args.out_csv_headers:
 		csv_headers = args.out_csv_headers
 	
-	for img_index, img in enumerate(args.img):
-		img_read = itk.ImageFileReader.New(FileName=img)
+	for img_index, img_filename in enumerate(args.img):
+		img_read = itk.ImageFileReader.New(FileName=img_filename)
 		img_read.Update()
 		img = img_read.GetOutput()
 		imgs_arr.append(img)
@@ -23,14 +25,30 @@ def main(args):
 		if args.out_csv_headers is None:
 			csv_headers.append(img_index)
 
+		img_obj_description = {}
+		img_obj_description["image"] = {}
+		img_obj_description["image"]["region"] = {}
+		img_obj_description["image"]["region"]["size"] = np.array(img.GetLargestPossibleRegion().GetSize()).tolist()
+		img_obj_description["image"]["region"]["index"] = np.array(img.GetLargestPossibleRegion().GetIndex()).tolist()
+		img_obj_description["image"]["spacing"] = np.array(img.GetSpacing()).tolist()
+		img_obj_description["image"]["origin"] = np.array(img.GetOrigin()).tolist() 
+		img_obj_description["image"]["direction"] = itk.GetArrayFromVnlMatrix(img.GetDirection().GetVnlMatrix().as_matrix()).tolist()
+		img_obj_description["img_index"] = img_index
+		img_obj_description["img_filename"] = img_filename
+		img_obj_description["slice"] = {}
+
+		imgs_arr_description.append(img_obj_description)
+
 	if len(args.img) != len(csv_headers):
 		print("The csv headers  provided do not have the same length as the number of images provided", file=sys.stderr)
 		sys.exit(1)
 	
-	if len(imgs_arr) == 1:
+	if len(imgs_arr) == 0:
 		print("You need to provide at least one image!", file=sys.stderr)
 		sys.exit(1)
+					
 
+	print(imgs_arr_description)
 	img_np = itk.GetArrayViewFromImage(imgs_arr[0])
 	img_shape_max = np.max(img_np.shape)
 	out_size = np.array([img_shape_max, img_shape_max]).tolist()
@@ -43,6 +61,9 @@ def main(args):
 	if imgs_arr[0].GetImageDimension() == 3:
 		img_shape = img_np.shape
 		for dim in range(imgs_arr[0].GetImageDimension()):
+			
+			imgs_arr_description[img_index]["slice"][dim] = []
+
 			for sln in range(img_shape[dim]):
 
 				start = [0,0,0]
@@ -93,6 +114,8 @@ def main(args):
 					
 					out_obj_csv[csv_headers[img_index]] = out_filename
 
+					imgs_arr_description[img_index]["slice"][dim].append(out_filename)
+
 				out_csv_rows.append(out_obj_csv)
 
 		with open(args.out_csv, "w") as f:
@@ -101,6 +124,9 @@ def main(args):
 			for row in out_csv_rows:
 				writer.writerow(row)
 
+		if(args.json_desc):
+			with open(args.json_desc, "w") as f:
+				f.write(json.dumps(imgs_arr_description))
 
 
 if __name__ == "__main__":
@@ -109,6 +135,7 @@ if __name__ == "__main__":
 	parser.add_argument('--out_csv', type=str, help='Output csv filename', default="out.csv")
 	parser.add_argument('--out_csv_headers', nargs="+", type=str, help='Output csv headers', default=None)
 	parser.add_argument('--out', type=str, help='Output directory', default="./")
+	parser.add_argument('--json_desc', type=str, help='Output json description for each image', default=None)
 
 	args = parser.parse_args()
 
