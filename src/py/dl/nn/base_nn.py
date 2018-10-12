@@ -185,16 +185,17 @@ class BaseNN:
                 matmul_op = activation(matmul_op)
 
             return matmul_op
-
+        
     def inference(self, data_tuple=None, images=None, keep_prob=1, is_training=False, ps_device="/cpu:0", w_device="/gpu:0"):
         raise NotImplementedError
     def metrics(self, logits, data_tuple, name='collection_metrics'):
         raise NotImplementedError
-    def training(self, loss, learning_rate, decay_steps, decay_rate):
+    def training(self, loss, learning_rate=1e-3, decay_steps=10000, decay_rate=0.96, staircase=False):
         raise NotImplementedError
     def loss(self, logits, data_tuple, class_weights=None):
         raise NotImplementedError
     def predict(self, logits):
         return logits
     def prediction_type(self):
-        return "image"
+        print("Implement in your own class, the return type must be one of 'image', 'segmentation', 'class', 'scalar'", file=sys.stderr)
+        raise NotImplementedError

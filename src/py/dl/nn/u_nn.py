@@ -83,10 +83,11 @@ class NN(base_nn.BaseNN):
 
             metrics_obj["ACCURACY"] = tf.metrics.accuracy(predictions=logits, labels=labels, weights=weight_map, name='accuracy')
             metrics_obj["AUC"] = tf.metrics.auc(predictions=logits, labels=labels, weights=weight_map, name='auc')
-            metrics_obj["FN"] = tf.metrics.false_negatives(predictions=logits, labels=labels, weights=weight_map, name='false_negatives')
-            metrics_obj["FP"] = tf.metrics.false_positives(predictions=logits, labels=labels, weights=weight_map, name='false_positives')
-            metrics_obj["TN"] = tf.metrics.true_negatives(predictions=logits, labels=labels, weights=weight_map, name='true_negatives')
-            metrics_obj["TP"] = tf.metrics.true_positives(predictions=logits, labels=labels, weights=weight_map, name='true_positives')
+            # metrics_obj["FN"] = tf.metrics.false_negatives(predictions=logits, labels=labels, weights=weight_map, name='false_negatives')
+            # metrics_obj["FP"] = tf.metrics.false_positives(predictions=logits, labels=labels, weights=weight_map, name='false_positives')
+            # metrics_obj["TN"] = tf.metrics.true_negatives(predictions=logits, labels=labels, weights=weight_map, name='true_negatives')
+            # metrics_obj["TP"] = tf.metrics.true_positives(predictions=logits, labels=labels, weights=weight_map, name='true_positives')
+            metrics_obj["IOU"] = tf.metrics.mean_iou(predictions=logits, labels=labels, num_classes=2, weights=None, metrics_collections=None, updates_collections=None, name=None)
             
             for key in metrics_obj:
                 tf.summary.scalar(key, metrics_obj[key][0])
@@ -94,7 +95,7 @@ class NN(base_nn.BaseNN):
             return metrics_obj
             
 
-    def training(self, loss, learning_rate, decay_steps, decay_rate):
+    def training(self, loss, learning_rate=1e-3, decay_steps=10000, decay_rate=0.96, staircase=False):
         
         global_step = tf.Variable(0, name='global_step', trainable=False)
 
@@ -102,7 +103,7 @@ class NN(base_nn.BaseNN):
         lr = tf.train.exponential_decay( learning_rate,
                                          global_step,
                                          decay_steps,
-                                         decay_rate, staircase=True )
+                                         decay_rate, staircase=staircase )
 
         tf.summary.scalar('2learning_rate', lr )
 
@@ -133,3 +134,7 @@ class NN(base_nn.BaseNN):
         denominator = tf.reduce_sum(logits_flat, axis=1) + tf.reduce_sum(labels_flat, axis=1) + 1e-7
 
         return 1.0 - tf.reduce_mean(intersection / denominator)
+
+    def prediction_type(self):
+        return "segmentation"
+
