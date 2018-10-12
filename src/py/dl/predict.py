@@ -20,7 +20,12 @@ in_group = parser.add_mutually_exclusive_group(required=True)
 in_group.add_argument('--img', type=str, help='Input image for prediction')
 in_group.add_argument('--dir', type=str, help='Directory with images for prediction')
 
-parser.add_argument('--json', help='JSON file with model description, created by train.py', required=True)
+in_group_model = parser.add_mutually_exclusive_group(required=True)
+in_group_model.add_argument('--json', help='JSON file with model description, created by train.py')
+
+in_group_model.add_argument('--model', help='Model created by train.py')
+parser.add_argument('--nn', type=str, help='neural network type, use when flag --model is used', default=None)
+parser.add_argument('--data_description', type=str, help='JSON file created by tfRecords.py use when flat --model is used', default=None)
 
 parser.add_argument('--out', type=str, help='Output image, csv, or directory. If --dir flag is used the output image name will be the <Directory set in out flag>/<imgage filename in directory dir>', default="out")
 parser.add_argument('--out_ext', type=str, help='Output extension for images', default='.nrrd')
@@ -38,10 +43,20 @@ resize_shape = args.resize
 ps_device = args.ps_device
 w_device = args.w_device
 
-with open(json_model_name, "r") as f:
-  model_description = json.load(f)
-  model_name = os.path.join(os.path.dirname(json_model_name), model_description["model"])
-  neural_network = model_description["nn"]
+if json_model_name is not None:
+  with open(json_model_name, "r") as f:
+    model_description = json.load(f)
+    data_description = model_description["description"]
+    model_name = os.path.join(os.path.dirname(json_model_name), model_description["model"])
+    neural_network = model_description["nn"]
+elif args.model is not None and args.nn is not None and args.data_description:
+  model_name = args.model
+  neural_network = args.nn
+  with open(args.data_description, "r") as f:
+    data_description = json.load(f)
+else:
+  print("Set the nn or the data_description parameters", file=sys.stderr)
+  sys.exit(1)
 
 print('json', json_model_name)
 print('model_name', model_name)
@@ -58,17 +73,18 @@ print('out_ext', out_ext)
 nn = importlib.import_module("nn." + neural_network).NN()
 
 if("description" in model_description):
-  nn.set_data_description(data_description=model_description["description"])
+  nn.set_data_description(data_description=data_description)
 
 class_prediction = False
 class_prediction_arr = []
-if("description" in model_description and "enumerate" in model_description["description"]):
+if("enumerate" in data_description):
   class_prediction = True
   class_obj = {}
-  enumerate_obj = model_description["description"][model_description["description"]["enumerate"]]["class"]
+  enumerate_obj = data_description[data_description["enumerate"]]["class"]
   for key in enumerate_obj:
     class_obj[enumerate_obj[key]] = key 
 
+  print(class_obj)
 prediction_arr = []
 
 filenames = []
@@ -186,15 +202,14 @@ with graph.as_default():
           img_np_x = np.reshape(img_np, tf_img_shape)
 
         label_map = sess.run([label], feed_dict={x: img_np_x.astype(np.float32)})
-        label_map = np.array(label_map)[0]
 
         if(class_prediction):
           class_prediction_arr.append({
             "img": img_obj["img"],
-            "class": class_obj[label_map[0][0]],
-            "prob": label_map[1][0]
+            "class": class_obj[np.argmax(label_map[0])],
+            "prob": label_map[0].tolist()
             })
-        elif(nn.prediction_type() == "image"):
+        elif(nn.prediction_type() == "image" or nn.prediction_type() == "segmentation"):
           if(resize_shape):
             assign_img = "label_map=label_map[" + ",".join(prediction_shape) + "]"
             exec(assign_img)
@@ -235,14 +250,16 @@ with graph.as_default():
             "scalar": label_map[0].tolist()
             })
         else:
-          print("I don't know what to do with the result, 'ill just printed")
+          print(label_map[0])
 
       except Exception as e:
         print("Error predicting image:", e, file=sys.stderr)
         print("Continuing...", file=sys.stderr)
 
     if(class_prediction):
-      with open(out_name, 'w') as csvfile:
+      out_csv = os.path.splitext(out_name)[0] + ".csv"
+      print("Writing: ", out_csv)
+      with open(out_csv, 'w') as csvfile:
         fieldnames = ['img', 'class', 'prob']
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
 
