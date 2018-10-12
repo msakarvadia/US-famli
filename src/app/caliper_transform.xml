@@ -4,7 +4,7 @@
   <title>Finds a transformation using the Ultra sound image calipers</title>
   <version>1.0.0</version>
   <description>
-    Using two points given by the calipers, finds a transformation to translate, rotate in the origin
+    Using two points given by the calipers, finds a transformation to translate, rotate in the origin and align with x axis
   </description>
   <contributor>Juan Carlos Prieto</contributor>
 
@@ -27,6 +27,15 @@
       <description>Input labeled image with 0 for background and objects with 1. Must contain two regions/points</description>
       <longflag>label</longflag>
     </image>
+
+    <double>
+      <name>widthRatio</name>
+      <label>Image width ratio</label>
+      <channel>input</channel>
+      <description>Ratio to resize the image</description>
+      <longflag>widthRatio</longflag>
+      <default>1.0</default>
+    </double>
 
   </parameters>
 

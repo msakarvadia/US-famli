@@ -196,7 +196,7 @@ int main (int argc, char * argv[]){
                 v1[0] = (end_point[0] - start_point[0]);
                 v1[1] = (end_point[1] - start_point[1]);
                 
-                double scale = 1.0/v1.magnitude() * image->GetLargestPossibleRegion().GetSize()[0];
+                double scale = 1.0/v1.magnitude() * image->GetLargestPossibleRegion().GetSize()[0] * widthRatio;
                 cout<<"Scale: "<<scale<<endl;
                 v1 = v1.normalize();
 
