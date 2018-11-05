@@ -25,7 +25,7 @@ in_group_model.add_argument('--json', help='JSON file with model description, cr
 
 in_group_model.add_argument('--model', help='Model created by train.py')
 parser.add_argument('--nn', type=str, help='neural network type, use when flag --model is used', default=None)
-parser.add_argument('--data_description', type=str, help='JSON file created by tfRecords.py use when flat --model is used', default=None)
+parser.add_argument('--data_description', type=str, help='JSON file created by tfRecords.py use when --model and --nn flag ares used', default=None)
 
 parser.add_argument('--out', type=str, help='Output image, csv, or directory. If --dir flag is used the output image name will be the <Directory set in out flag>/<imgage filename in directory dir>', default="out")
 parser.add_argument('--out_ext', type=str, help='Output extension for images', default='.nrrd')
@@ -55,7 +55,7 @@ elif args.model is not None and args.nn is not None and args.data_description:
   with open(args.data_description, "r") as f:
     data_description = json.load(f)
 else:
-  print("Set the nn or the data_description parameters", file=sys.stderr)
+  print("Set the --json or the --model and --nn and --data_description parameters", file=sys.stderr)
   sys.exit(1)
 
 print('json', json_model_name)
@@ -114,6 +114,37 @@ elif(args.dir):
           os.makedirs(os.path.dirname(fobj["out"]))
 
       if args.ow or not os.path.exists(fobj["out"]):
+        filenames.append(fobj)
+
+
+if "slice" in data_description and data_description["slice"]:
+
+  filenames_cp = filenames[:]
+  filenames = []
+  for slimg in filenames_cp:
+
+    slimg_base = os.path.splitext(os.path.basename(slimg["img"]))[0]
+
+    slice_obj = {}
+    slice_obj["img"] = [slimg]
+    slice_obj["out_csv_headers"] = ["img"]
+    slice_obj["out"] = os.path.join(args.out, slimg_base)
+    slice_obj["out_csv"] = os.path.join(args.out, slimg_base, "slice.csv")
+    slice_obj["json_desc"] = os.path.join(args.out, slimg_base, "slice.json")
+
+    # We convert the dictionary to a namedtuple, a.k.a, python object, i.e., argparse object
+    slice_args = namedtuple("Slice", slice_obj.keys())(*slice_obj.values())
+    # Call the main of the script
+    nrrd3D_2D.main(slice_args)
+
+    # We read the saved data and append the properties of the 3D image to all slices
+    with open(slice_obj["out_csv"]) as csvfileslice:
+      csv_slice_reader = csv.DictReader(csvfileslice)
+      for slice_row in csv_slice_reader:
+        # We now have a csv_rows list with slices instead of 3D volumes
+        fobj = {}
+        fobj["img"] = slice_row["image"]
+        fobj["out"] = os.path.join(args.out, slimg_base, "predict", os.path.splitext(os.path.basename(slice_row["image"]))[0] + out_ext)
         filenames.append(fobj)
 
 if len(filenames) == 0:
