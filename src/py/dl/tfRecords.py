@@ -139,12 +139,25 @@ def main(args):
 
 				##If the path exists then it will try to read it as an image
 				if(os.path.exists(fobj[key])):
-
 					img_read = itk.ImageFileReader.New(FileName=fobj[key])
 					img_read.Update()
 					img = img_read.GetOutput()
 					
 					img_np = itk.GetArrayViewFromImage(img).astype(float)
+					if(args.resize):
+						resize_shape = list(args.resize)
+						if(img.GetNumberOfComponentsPerPixel() > 1):
+							resize_shape += [img.GetNumberOfComponentsPerPixel()]
+						img_np_x =  np.zeros(resize_shape)
+
+						img_np_assign_shape = []
+						for s in img_np.shape:
+							img_np_assign_shape.append("0:" + str(s))
+
+						assign_img = "img_np_x[" + ",".join(img_np_assign_shape) + "]=img_np"
+						exec(assign_img)
+						img_np = img_np_x
+
 					feature[key] =  _float_feature(img_np.reshape(-1).tolist())
 
 					# Put the shape of the image in the json object if it does not exists. This is done for global information
@@ -205,7 +218,6 @@ def main(args):
 					except:
 						# If it fails the try saving it as a bytes feature
 						# encode the string
-						
 						feature[key] = _bytes_feature(obj[key].encode())
 
 						if(not "shape" in obj[key]):
@@ -242,6 +254,7 @@ def main(args):
 	with open(outjson, "w") as f:
 		f.write(json.dumps(obj))
 	
+	outcsv = None
 	if(len(csv_rows) > 0):
 		outcsv = os.path.splitext(args.csv)[0] + "_tfRecords.csv"
 		print("Writing:", outcsv)
@@ -258,6 +271,7 @@ def main(args):
 		split_obj = {}
 		split_obj["json"] = outjson
 		split_obj["split"] = args.split
+		split_obj["csv"] = outcsv
 
 		# We convert the dictionary to a namedtuple, a.k.a, python object, i.e., argparse object
 		split_args = namedtuple("Split", split_obj.keys())(*split_obj.values())
@@ -270,6 +284,7 @@ if __name__ == "__main__":
 	parser.add_argument('--csv', type=str, help='CSV file with dataset information,', required=True)
 	parser.add_argument('--enumerate', type=str, default=None, help='Column name in CSV. If you are storing a label or category to perform a classification task. If it is an image, it will read the FIRST image in your csv and extract the existing labels.')
 	parser.add_argument('--slice', type=bool, default=False, help="If it is a 3D image, saves slices in all the major axis and the stores them as tfRecords")
+	parser.add_argument('--resize', nargs="+", type=int, default=None, help='Resize images to store as tfRecord. The resize parameter must be equal or larger than the largest image in the dataset. Do not include channels and flip axes, i.e, z y x or y x for 3D, 2D images respectively')
 	parser.add_argument('--out', type=str, default="./out", help="Output directory")
 	parser.add_argument('--split', type=float, default=0, help="Split the data for evaluation. [0-1], 0=no split")
 
