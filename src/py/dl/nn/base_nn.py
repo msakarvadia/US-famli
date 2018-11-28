@@ -7,6 +7,7 @@ import tensorflow as tf
 import json
 import os
 import glob
+import sys
 
 class BaseNN:
 

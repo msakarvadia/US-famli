@@ -126,3 +126,6 @@ class NN(base_nn.BaseNN):
         labels_flat = tf.reshape(labels, [batch_size, -1])
 
         return tf.losses.absolute_difference(predictions=logits_flat, labels=labels_flat)
+
+    def prediction_type(self):
+        return "image"
