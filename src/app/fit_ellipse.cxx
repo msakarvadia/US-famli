@@ -19,6 +19,7 @@
 #include <vnl/algo/vnl_levenberg_marquardt.h>
 #include "best_ellipse_fit.h"
 #include "best_ellipse_fit_t.h"
+#include "best_circle_fit.h"
 
 using namespace std;
 
@@ -255,6 +256,103 @@ int main (int argc, char * argv[]){
         writer->SetInput(outimg);
         writer->Update();
 
+    }else if(circleMode){
+        LabelGeometryImageFilterType::Pointer labelGeometryImageFilter = LabelGeometryImageFilterType::New();
+        labelGeometryImageFilter->SetInput( labelimage );
+        labelGeometryImageFilter->SetIntensityInput( labelimage );
+
+        labelGeometryImageFilter->CalculatePixelIndicesOn();
+        labelGeometryImageFilter->CalculateOrientedBoundingBoxOn();
+        labelGeometryImageFilter->CalculateOrientedLabelRegionsOn();
+        labelGeometryImageFilter->CalculateOrientedIntensityRegionsOn();
+
+        labelGeometryImageFilter->Update();
+
+        LabelGeometryImageFilterType::LabelsType::iterator liit;
+        LabelGeometryImageFilterType::LabelsType allLabels = labelGeometryImageFilter->GetLabels();
+
+        for(liit = allLabels.begin(); liit != allLabels.end(); ++liit){
+            
+            LabelPixelType labelValue = *liit;
+            cout<<"Label Value: "<<(int)labelValue<<endl;
+            if(labelValue != 0){
+
+                vector< vnl_vector<double> > boundary_points = GetBoundaryPoints(labelimage);
+                
+                vnl_vector<double> x_radius_center(3);
+
+                x_radius_center[0] = labelGeometryImageFilter->GetMajorAxisLength(labelValue)/2.0;
+
+                x_radius_center[1] = labelGeometryImageFilter->GetCentroid(labelValue)[0];
+                x_radius_center[2] = labelGeometryImageFilter->GetCentroid(labelValue)[1];
+
+                
+                BestCircleFit bestfit = BestCircleFit(3, boundary_points.size());
+                bestfit.SetBoundaryPoints(boundary_points);
+
+                vnl_levenberg_marquardt levenberg(bestfit);
+
+                cout<<"Initial guess: "<<x_radius_center<<endl;
+                levenberg.minimize(x_radius_center);
+                cout<<"Best fit: "<<x_radius_center<<endl;
+
+                vnl_vector<double> radius(1);
+                radius[0] = x_radius_center[0];
+                double radius_sqr = radius[0]*radius[0];
+
+                vnl_vector<double> center(2);
+                center[0] = x_radius_center[1];
+                center[1] = x_radius_center[2];
+
+                itout.GoToBegin();
+                
+                while(!itout.IsAtEnd()){
+                
+                    IndexType xy_index = itout.GetIndex();
+                    vnl_vector<double> xy(2, 0);
+                    xy[0] = xy_index[0];
+                    xy[1] = xy_index[1];
+                    xy = xy - center;
+
+                    // (x-h)² + (y-k)² = r²
+                    double xh = pow(xy[0], 2);
+                    double yk = pow(xy[1], 2);
+                    
+                    itout.Set(0);
+                    
+                    if(xh + yk <= radius_sqr){
+                        itout.Set(1);
+                    }
+
+                    ++itout;
+                }
+
+
+                cout<<"Writing: "<<outputFilename<<endl;
+
+                InputLabelImageFileWriterType::Pointer writer = InputLabelImageFileWriterType::New();
+                writer->SetFileName(outputFilename + ".nrrd");
+                writer->SetInput(outimg);
+                writer->Update();
+
+                ostringstream os_json;
+
+                os_json<<"{";
+                os_json<<"\"radius\":"<<json_vector_str(radius)<<",";
+                os_json<<"\"center\":"<<json_vector_str(center);
+                os_json<<"}";
+
+                cout<<os_json.str();
+
+                ofstream outjson((outputFilename + ".json").c_str());
+                if(outjson.is_open()){
+                    outjson << os_json.str();
+                    outjson.close();
+                }else{
+                    cerr<<"Could not create file: "<<outputFilename<<endl;
+                }
+            }
+        }
     }else{
 
         LabelGeometryImageFilterType::Pointer labelGeometryImageFilter = LabelGeometryImageFilterType::New();

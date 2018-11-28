@@ -144,7 +144,8 @@ SET(EXE_NAME fit_ellipse)
 SET(${EXE_NAME}_LIBRARIES  ${ITK_LIBRARIES})
 SET(${EXE_NAME}_ADDITIONAL_SRCS 
 	best_ellipse_fit.cxx
-	best_ellipse_fit_t.cxx)
+	best_ellipse_fit_t.cxx
+	best_circle_fit.cxx)
 
 SEMMacroBuildCLI(
 NAME ${EXE_NAME}
