@@ -14,20 +14,23 @@ import csv
 
 print("Tensorflow version:", tf.__version__)
 
-parser = argparse.ArgumentParser(description='U net segmentation', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+parser = argparse.ArgumentParser(description='Predict an input with a trained neural network', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
 in_group = parser.add_mutually_exclusive_group(required=True)
 in_group.add_argument('--img', type=str, help='Input image for prediction')
 in_group.add_argument('--dir', type=str, help='Directory with images for prediction')
+in_group.add_argument('--csv', type=str, help='CSV file with images')
+parser.add_argument('--csv_column', type=str, default='image', help='CSV column name (Only used if flag csv is used)')
+parser.add_argument('--csv_root_path', type=str, default='', help='Replaces a root path directory to empty, this is use to recreate a directory structure in the output directory, otherwise, the output name will be the name in the csv (only if csv flag is used)')
 
 in_group_model = parser.add_mutually_exclusive_group(required=True)
 in_group_model.add_argument('--json', help='JSON file with model description, created by train.py')
 
 in_group_model.add_argument('--model', help='Model created by train.py')
 parser.add_argument('--nn', type=str, help='neural network type, use when flag --model is used', default=None)
-parser.add_argument('--data_description', type=str, help='JSON file created by tfRecords.py use when --model and --nn flag ares used', default=None)
+parser.add_argument('--data_description', type=str, help='JSON file created by tfRecords.py use when --model and --nn flag are used', default=None)
 
-parser.add_argument('--out', type=str, help='Output image, csv, or directory. If --dir flag is used the output image name will be the <Directory set in out flag>/<imgage filename in directory dir>', default="out")
+parser.add_argument('--out', type=str, help='Output image, csv, or directory. If --dir flag is used the output image name will be the <Directory set in out flag>/<image filename in directory dir>', default="out")
 parser.add_argument('--out_ext', type=str, help='Output extension for images', default='.nrrd')
 parser.add_argument('--ow', type=int, help='Overwrite outputs', default=1)
 parser.add_argument('--resize', nargs="+", type=int, help='Resize images during prediction, useful when doing whole directories with images of diferent sizes. This is needed to set the value of the placeholder for tensorflow. e.x. 1500 1500. The image will be resized for the prediction but the original image size will be stored. Do not include the channels/pixel components in the resize parameters', default=None)
@@ -42,11 +45,13 @@ out_ext = args.out_ext
 resize_shape = args.resize
 ps_device = args.ps_device
 w_device = args.w_device
+data_description = {} 
 
 if json_model_name is not None:
   with open(json_model_name, "r") as f:
     model_description = json.load(f)
-    data_description = model_description["description"]
+    if "description" in model_description:
+      data_description = model_description["description"]
     model_name = os.path.join(os.path.dirname(json_model_name), model_description["model"])
     neural_network = model_description["nn"]
 elif args.model is not None and args.nn is not None and args.data_description:
@@ -72,7 +77,7 @@ print('out_ext', out_ext)
 
 nn = importlib.import_module("nn." + neural_network).NN()
 
-if("description" in model_description):
+if(data_description):
   nn.set_data_description(data_description=data_description)
 
 class_prediction = False
@@ -96,18 +101,31 @@ if(args.img):
   fobj["out"] = out_name
   if args.ow or not os.path.exists(fobj["out"]):
     filenames.append(fobj)
-elif(args.dir):
-  
-  normpath = os.path.normpath("/".join([args.dir, '**', '*']))
+else:
 
-  for img in glob.iglob(normpath, recursive=True):
-    if os.path.isfile(img) and True in [ext in img for ext in [".nrrd", ".nii", ".nii.gz", ".mhd", ".dcm", ".jpg", ".png"]]:
+  image_filenames = []
+  replace_dir_name = ''
+  if(args.dir):
+    replace_dir_name = args.dir
+    normpath = os.path.normpath("/".join([args.dir, '**', '*']))
+    for img in glob.iglob(normpath, recursive=True):
+      if os.path.isfile(img) and True in [ext in img for ext in [".nrrd", ".nii", ".nii.gz", ".mhd", ".dcm", ".jpg", ".png"]]:
+        image_filenames.append(img)
+  elif(args.csv):
+    replace_dir_name = args.csv_root_path
+    with open(args.csv) as csvfile:
+      csv_reader = csv.DictReader(csvfile)
+      for row in csv_reader:
+        image_filenames.append(row[args.csv_column])
+
+  for img in image_filenames:
       fobj = {}
       fobj["img"] = img
-
       if(not class_prediction):
-        image_dir_filename = img.replace(args.dir, '')
-        image_dir_filename = os.path.splitext(image_dir_filename)[0] +  out_ext
+        image_dir_filename = img.replace(replace_dir_name, '')
+        if(out_ext):
+          image_dir_filename = os.path.splitext(image_dir_filename)[0] +  out_ext
+          
         fobj["out"] = os.path.normpath("/".join([out_name, image_dir_filename]))
 
         if not os.path.exists(os.path.dirname(fobj["out"])):
@@ -144,7 +162,10 @@ if "slice" in data_description and data_description["slice"]:
         # We now have a csv_rows list with slices instead of 3D volumes
         fobj = {}
         fobj["img"] = slice_row["image"]
-        fobj["out"] = os.path.join(args.out, slimg_base, "predict", os.path.splitext(os.path.basename(slice_row["image"]))[0] + out_ext)
+        img_out_name = os.path.basename(slice_row["image"])
+        if(out_ext):
+          img_out_name = os.path.splitext()[0] + out_ext
+        fobj["out"] = os.path.join(args.out, slimg_base, "predict", img_out_name)
         filenames.append(fobj)
 
 if len(filenames) == 0:
@@ -245,11 +266,11 @@ with graph.as_default():
             assign_img = "label_map=label_map[" + ",".join(prediction_shape) + "]"
             exec(assign_img)
 
+
           #THE NUMBER OF CHANNELS OF THE OUTPUT ARE GIVEN BY THE NEURAL NET
           label_map_reshape = list(img_np.shape)
           if(img.GetNumberOfComponentsPerPixel() > 1):
             label_map_reshape[-1] = np.array(label_map).shape[-1]
-          
           
           label_map = np.reshape(label_map, label_map_reshape)
           label_map = np.absolute(label_map)
