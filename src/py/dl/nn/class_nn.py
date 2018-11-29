@@ -134,7 +134,7 @@ class NN(base_nn.BaseNN):
 
         return tf.metrics.mean_iou(predictions=logits_flat, labels=labels_flat)
 
-    def training(self, loss, learning_rate, decay_steps, decay_rate):
+    def training(self, loss, learning_rate, decay_steps, decay_rate, staircase):
         
         global_step = tf.Variable(0, name='global_step', trainable=False)
 
@@ -142,7 +142,7 @@ class NN(base_nn.BaseNN):
         lr = tf.train.exponential_decay( learning_rate,
                                          global_step,
                                          decay_steps,
-                                         decay_rate, staircase=True )
+                                         decay_rate, staircase=staircase )
 
         tf.summary.scalar('2learning_rate', lr )
 
