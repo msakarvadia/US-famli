@@ -29,7 +29,7 @@ def main(args):
 		out_img.FillBuffer(0)
 
 		out_img_np = itk.GetArrayViewFromImage(out_img)
-		out_img_np[int(min_max_obj["min"][1] - args.padx):int(min_max_obj["max"][1] + args.padx),int(min_max_obj["min"][0] - args.pady):int(min_max_obj["max"][0] + args.pady)] = 1
+		out_img_np[int(min_max_obj["min"][1] - args.pady):int(min_max_obj["max"][1] + args.pady),int(min_max_obj["min"][0] - args.padx):int(min_max_obj["max"][0] + args.padx)] = 1
 
 		print("Writing:", args.out)
 		writer = itk.ImageFileWriter[OutputImageType].New(FileName=args.out, Input=out_img)
