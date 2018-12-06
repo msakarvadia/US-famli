@@ -202,7 +202,11 @@ except Exception as e:
 
 if(resize_shape):
   resize_shape = tuple(resize_shape)
-  tf_img_shape = (1,) + resize_shape + (tf_img_shape[-1],)
+elif("resize" in data_description):
+  resize_shape = data_description["resize"]
+
+if(resize_shape):
+  tf_img_shape = [1] + resize_shape + [tf_img_shape[-1]]
 
 graph = tf.Graph()
 
