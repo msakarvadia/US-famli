@@ -1,4 +1,4 @@
-#include "sample_imageCLP.h"
+#include "sample_image_rgbCLP.h"
 
 #include <itkImage.h>
 #include <itkImageFileReader.h>
@@ -19,11 +19,12 @@
 #include <itkBinaryThresholdImageFilter.h>
 #include <itkLabelImageToLabelMapFilter.h>
 #include <itkLabelStatisticsImageFilter.h>
+#include <itkRGBPixel.h>
 
 using namespace std;
 
-typedef unsigned short PixelType;
-static const int Dimension = 3;
+typedef itk::RGBPixel<unsigned char> PixelType;
+static const int Dimension = 2;
 
 typedef itk::Image<PixelType, Dimension> InputImageType;
 typedef InputImageType::IndexType InputImageIndexType;
@@ -35,18 +36,25 @@ typedef InputIteratorType::RadiusType InputIteratorRadiusType;
 typedef itk::ImageRandomNonRepeatingConstIteratorWithIndex<InputImageType> InputRandomIteratorType;
 typedef itk::ImageFileWriter<InputImageType> ImageFileWriterType;
 
-typedef unsigned short VectorImagePixelType;
-typedef itk::VectorImage<VectorImagePixelType, Dimension> VectorImageType;  
+typedef itk::Image<unsigned char, Dimension> InputImageLabelType;
+typedef itk::ImageFileReader<InputImageLabelType> InputImageLabelFileReaderType;
+typedef InputImageLabelType::IndexType InputImageLabelIndexType;
+typedef InputImageLabelType::Pointer InputImageLabelPointerType;
+typedef itk::ImageFileReader<InputImageLabelType> InputImageLabelFileReaderType;
+typedef itk::NeighborhoodIterator<InputImageLabelType> InputLabelIteratorType;
+typedef InputLabelIteratorType::RadiusType InputIteratorLabelRadiusType;
+
+typedef itk::VectorImage<PixelType, Dimension> VectorImageType;  
 typedef itk::ComposeImageFilter< InputImageType, VectorImageType> ComposeImageFilterType;
 typedef itk::NeighborhoodIterator<VectorImageType> VectorImageIteratorType;
 typedef VectorImageIteratorType::RadiusType VectorImageRadiusType;
 typedef itk::ImageFileWriter<VectorImageType> VectorImageFileWriterType;
 
-bool containsLabel(InputImagePointerType labelImage, InputIteratorRadiusType radius, InputImageIndexType index, int labelValueContains, double labelValueContainsPercentageMax){
+bool containsLabel(InputImageLabelPointerType labelImage, InputIteratorLabelRadiusType radius, InputImageLabelIndexType index, int labelValueContains, double labelValueContainsPercentageMax, double labelValueContainsPercentageMin = 0){
 	if(labelImage && labelValueContains >= 0){
 		int count = 0;
 
-		InputIteratorType init(radius, labelImage, labelImage->GetLargestPossibleRegion());
+		InputLabelIteratorType init(radius, labelImage, labelImage->GetLargestPossibleRegion());
 		init.SetLocation(index);
 
 		int size = init.Size();
@@ -57,7 +65,7 @@ bool containsLabel(InputImagePointerType labelImage, InputIteratorRadiusType rad
 			}
 		}
 		double ratio = ((double)count)/((double)size);
-		return  ratio <= labelValueContainsPercentageMax;	
+		return  labelValueContainsPercentageMin <= ratio && ratio <= labelValueContainsPercentageMax;	
 	}
 
 	return true;
@@ -68,7 +76,7 @@ int main (int argc, char * argv[]){
 
 	PARSE_ARGS;
 	
-	if(vectorImageFilename.size() == 0){
+	if(vectorImageFilename.size() == 0 || (labelImageFilename.compare("") == 0)){
 		cout<<"Type "<<argv[0]<<" --help to find out how to use this program."<<endl;
 		return 1;
 	}
@@ -103,19 +111,19 @@ int main (int argc, char * argv[]){
 		vectorcomposeimage = composeImageFilter->GetOutput();
 	}
 
-	InputImageType::Pointer labelImage = 0;
+	InputImageLabelType::Pointer labelImage = 0;
 
 	if(labelImageFilename.compare("") != 0){
-		InputImageFileReaderType::Pointer readimage = InputImageFileReaderType::New();
+		InputImageLabelFileReaderType::Pointer readimage = InputImageLabelFileReaderType::New();
 		readimage->SetFileName(labelImageFilename);
 		readimage->Update();
 		labelImage = readimage->GetOutput();	
 	}
 
-	InputImageType::Pointer maskImage = 0;
+	InputImageLabelType::Pointer maskImage = 0;
 
 	if(maskImageFilename.compare("") != 0){
-		InputImageFileReaderType::Pointer readimage = InputImageFileReaderType::New();
+		InputImageLabelFileReaderType::Pointer readimage = InputImageLabelFileReaderType::New();
 		readimage->SetFileName(maskImageFilename);
 		readimage->Update();
 		maskImage = readimage->GetOutput();	
@@ -132,7 +140,7 @@ int main (int argc, char * argv[]){
 	VectorImageIteratorType::RadiusType radius;	
 	radius[0] = neighborhood[0];
 	radius[1] = neighborhood[1];
-	radius[2] = neighborhood[2];
+	// radius[2] = neighborhood[2];
 
 	VectorImageType::Pointer vectoroutputimage = 0;
 	InputImagePointerType outputimage = 0;
@@ -143,7 +151,7 @@ int main (int argc, char * argv[]){
 		VectorImageType::SizeType size;
 		size[0] = radius[0]*2 + 1;
 		size[1] = radius[1]*2 + 1;
-		size[2] = radius[2]*2 + 1;
+		// size[2] = radius[2]*2 + 1;
 		VectorImageType::RegionType region;
 		region.SetSize(size);
 		
@@ -158,7 +166,7 @@ int main (int argc, char * argv[]){
 		InputImageType::SizeType size;
 		size[0] = radius[0]*2 + 1;
 		size[1] = radius[1]*2 + 1;
-		size[2] = radius[2]*2 + 1;
+		// size[2] = radius[2]*2 + 1;
 		VectorImageType::RegionType region;
 		region.SetSize(size);
 		
@@ -170,8 +178,9 @@ int main (int argc, char * argv[]){
 
 	char *uuid = new char[100];
 	
+	
 	while(!randomit.IsAtEnd() && numberOfSamples){
-		if(containsLabel(labelImage, radius, randomit.GetIndex(), labelValueContains, labelValueContainsPercentageMax) && (!maskImage || (maskImage && maskImage->GetPixel(randomit.GetIndex())))){
+		if(containsLabel(labelImage, radius, randomit.GetIndex(), labelValueContains, labelValueContainsPercentageMax) && (!maskImage || (maskImage && containsLabel(maskImage, radius, randomit.GetIndex(), 1, 1, 1)))){
 			uuid_t id;
 			uuid_generate(id);
 		  	uuid_unparse(id, uuid);
@@ -183,7 +192,7 @@ int main (int argc, char * argv[]){
 			VectorImageType::IndexType outputoriginindex = randomit.GetIndex();
 			outputoriginindex[0] -= neighborhood[0];
 			outputoriginindex[1] -= neighborhood[1];
-			outputoriginindex[2] -= neighborhood[2];
+			// outputoriginindex[2] -= neighborhood[2];
 
 		  	if(vectoroutputimage){
 
@@ -198,7 +207,7 @@ int main (int argc, char * argv[]){
 	  			VectorImageType::IndexType outputindex;
 				outputindex[0] = neighborhood[0];
 				outputindex[1] = neighborhood[1];
-				outputindex[2] = neighborhood[2];
+				// outputindex[2] = neighborhood[2];
 
 				outit.SetLocation(outputindex);
 
@@ -231,7 +240,7 @@ int main (int argc, char * argv[]){
 		  			InputImageType::IndexType outputindex;
 					outputindex[0] = neighborhood[0];
 					outputindex[1] = neighborhood[1];
-					outputindex[2] = neighborhood[2];
+					// outputindex[2] = neighborhood[2];
 
 					outit.SetLocation(outputindex);
 

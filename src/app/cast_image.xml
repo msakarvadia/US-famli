@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<executable>
+  <category>Image filter</category>
+  <title>Cast an image</title>
+  <version>1.0.0</version>
+  <description>
+    Cast an image from ushort to char
+  </description>
+  <contributor>Juan Carlos Prieto</contributor>
+
+  <parameters>
+    <label>Input parameters</label>
+    <description>Input parameters</description>
+
+    <image>
+      <name>inputImageFilename</name>
+      <label>Input volume</label>
+      <channel>input</channel>
+      <description>Input image rgb</description>
+      <longflag>img</longflag>
+    </image>
+
+  </parameters>
+
+  <parameters>
+    <label>Ouput parameters</label>
+    <description>Output parameters</description>
+
+    <image>
+      <name>outputImageFilename</name>
+      <label>Output label image</label>
+      <channel>output</channel>
+      <description>Write the output of the image</description>
+      <longflag>out</longflag>
+      <default>out.nrrd</default>
+    </image>
+
+  </parameters>
+</executable>

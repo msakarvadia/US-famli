@@ -33,8 +33,8 @@ int main (int argc, char * argv[]){
     }
 
     //Read Image
-    typedef unsigned short InputPixelType;
-    static const int dimension = 3;
+    typedef unsigned char InputPixelType;
+    static const int dimension = 2;
     typedef itk::Image< InputPixelType, dimension> InputImageType;
     typedef InputImageType::Pointer InputImagePointerType;
 
@@ -77,7 +77,7 @@ int main (int argc, char * argv[]){
 
     InputImagePointerType outputimg = duplicator->GetOutput();
     
-    typedef unsigned short InputLabelPixelType;
+    typedef unsigned char InputLabelPixelType;
     typedef itk::Image< InputLabelPixelType, dimension> InputLabelImageType;
     typedef InputLabelImageType::Pointer InputLabelImagePointerType;
 
@@ -130,7 +130,7 @@ int main (int argc, char * argv[]){
 
             radius[0] = (region.GetSize()[0] - 1)/2;
             radius[1] = (region.GetSize()[1] - 1)/2;
-            radius[2] = (region.GetSize()[2] - 1)/2;
+            // radius[2] = (region.GetSize()[2] - 1)/2;
             
 
             InputImageNeighborhoodIteratorType it(radius, imgin, imgin->GetLargestPossibleRegion());
@@ -142,7 +142,7 @@ int main (int argc, char * argv[]){
 
             centerofstructure[0] = region.GetIndex()[0] + (region.GetSize()[0] - 1)/2;
             centerofstructure[1] = region.GetIndex()[1] + (region.GetSize()[1] - 1)/2;
-            centerofstructure[2] = region.GetIndex()[2] + (region.GetSize()[2] - 1)/2;
+            // centerofstructure[2] = region.GetIndex()[2] + (region.GetSize()[2] - 1)/2;
 
             it.SetLocation(centerofstructure);
 
@@ -168,7 +168,7 @@ int main (int argc, char * argv[]){
 
         radius[0] = 4;
         radius[1] = 4;
-        radius[2] = 0;
+        // radius[2] = 0;
 
         InputImageNeighborhoodIteratorType itout(radius, outputimg, outputimg->GetLargestPossibleRegion());
 
@@ -178,11 +178,17 @@ int main (int argc, char * argv[]){
         itoutrand.GoToBegin();
 
         vector< InputImageNeighborhoodIteratorType::OffsetType > offsets;
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){1,0,0});
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){0,1,0});
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){0,0,0});
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-1,0,0});
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){0,-1,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){1,0,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){0,1,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){0,0,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-1,0,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){0,-1,0});
+
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){1,0});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){0,1});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){0,0});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-1,0});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){0,-1});
         
 
         while(!itoutrand.IsAtEnd()){
@@ -205,7 +211,7 @@ int main (int argc, char * argv[]){
 
         radius[0] = 10;
         radius[1] = 10;
-        radius[2] = 0;
+        // radius[2] = 0;
 
         InputImageNeighborhoodIteratorType itout(radius, outputimg, outputimg->GetLargestPossibleRegion());
 
@@ -216,73 +222,141 @@ int main (int argc, char * argv[]){
 
         vector< InputImageNeighborhoodIteratorType::OffsetType > offsets;
 
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-8,0,0});
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-8,1,0});
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-7,1,0});
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-6,1,0});
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-5,1,0});
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-4,1,0});
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-3,1,0});
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-2,1,0});
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-2,0,0});
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-2,-1,0});
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-3,-1,0});
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-4,-1,0});
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-5,-1,0});
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-6,-1,0});
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-7,-1,0});
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-8,-1,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-8,0,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-8,1,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-7,1,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-6,1,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-5,1,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-4,1,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-3,1,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-2,1,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-2,0,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-2,-1,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-3,-1,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-4,-1,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-5,-1,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-6,-1,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-7,-1,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-8,-1,0});
 
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){8,0,0});
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){8,1,0});
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){7,1,0});
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){6,1,0});
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){5,1,0});
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){4,1,0});
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){3,1,0});
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){2,1,0});
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){2,0,0});
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){2,-1,0});
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){3,-1,0});
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){4,-1,0});
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){5,-1,0});
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){6,-1,0});
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){7,-1,0});
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){8,-1,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){8,0,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){8,1,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){7,1,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){6,1,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){5,1,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){4,1,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){3,1,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){2,1,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){2,0,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){2,-1,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){3,-1,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){4,-1,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){5,-1,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){6,-1,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){7,-1,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){8,-1,0});
 
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){0, -8 ,0});
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-1, -8 ,0});
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-1, -7 ,0});
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-1, -6 ,0});
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-1, -5 ,0});
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-1, -4 ,0});
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-1, -3 ,0});
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-1, -2 ,0});
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){0, -2 ,0});
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){1, -8 ,0});
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){1, -7 ,0});
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){1, -6 ,0});
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){1, -5 ,0});
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){1, -4 ,0});
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){1, -3 ,0});
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){1, -2 ,0});
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){0, 8 ,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){0, -8 ,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-1, -8 ,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-1, -7 ,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-1, -6 ,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-1, -5 ,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-1, -4 ,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-1, -3 ,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-1, -2 ,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){0, -2 ,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){1, -8 ,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){1, -7 ,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){1, -6 ,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){1, -5 ,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){1, -4 ,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){1, -3 ,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){1, -2 ,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){0, 8 ,0});
         
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){0, 2 ,0});
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-1, 2 ,0});
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-1, 3 ,0});
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-1, 4 ,0});
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-1, 5 ,0});
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-1, 6 ,0});
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-1, 7 ,0});
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-1, 8 ,0});
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){1, 2 ,0});
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){1, 3 ,0});
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){1, 4 ,0});
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){1, 5 ,0});
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){1, 6 ,0});
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){1, 7 ,0});
-        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){1, 8 ,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){0, 2 ,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-1, 2 ,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-1, 3 ,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-1, 4 ,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-1, 5 ,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-1, 6 ,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-1, 7 ,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-1, 8 ,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){1, 2 ,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){1, 3 ,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){1, 4 ,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){1, 5 ,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){1, 6 ,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){1, 7 ,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){1, 8 ,0});
+
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-8,0});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-8,1});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-7,1});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-6,1});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-5,1});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-4,1});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-3,1});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-2,1});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-2,0});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-2,-1});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-3,-1});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-4,-1});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-5,-1});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-6,-1});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-7,-1});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-8,-1});
+
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){8,0});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){8,1});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){7,1});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){6,1});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){5,1});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){4,1});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){3,1});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){2,1});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){2,0});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){2,-1});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){3,-1});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){4,-1});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){5,-1});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){6,-1});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){7,-1});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){8,-1});
+
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){0, -8});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-1, -8});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-1, -7});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-1, -6});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-1, -5});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-1, -4});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-1, -3});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-1, -2});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){0, -2});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){1, -8});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){1, -7});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){1, -6});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){1, -5});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){1, -4});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){1, -3});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){1, -2});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){0, 8});
+        
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){0, 2});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-1, 2});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-1, 3});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-1, 4});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-1, 5});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-1, 6});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-1, 7});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-1, 8});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){1, 2});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){1, 3});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){1, 4});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){1, 5});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){1, 6});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){1, 7});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){1, 8});
         
         while(!itoutrand.IsAtEnd()){
             itout.SetLocation(itoutrand.GetIndex());
