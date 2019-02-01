@@ -11,6 +11,20 @@ from . import base_nn
 
 class NN(base_nn.BaseNN):
 
+    def set_data_description(self, json_filename=None, data_description=None):
+        super(NN, self).set_data_description(json_filename=json_filename, data_description=data_description)
+        self.num_channels = 1
+        self.out_channels = 1
+
+        if "data_keys" in self.data_description:
+            data_keys = self.data_description["data_keys"]
+            if data_keys[0] in self.data_description and "shape" in self.data_description[data_keys[0]]:
+                self.num_channels = self.data_description[data_keys[0]]["shape"][-1]
+
+            if data_keys[1] in self.data_description and "shape" in self.data_description[data_keys[1]]:
+                self.out_channels = self.data_description[data_keys[1]]["shape"][-1]
+
+
     def inference(self, data_tuple=None, images=None, keep_prob=1, is_training=False, ps_device="/cpu:0", w_device="/gpu:0"):
 
         if(data_tuple):
@@ -22,11 +36,10 @@ class NN(base_nn.BaseNN):
 
         shape = tf.shape(images)
         batch_size = shape[0]
-        num_channels = images.get_shape().as_list()[-1]
 
         images = tf.layers.batch_normalization(images, training=is_training)
 
-        conv1_0 = self.convolution2d(images, name="conv1_0_op", filter_shape=[5, 5, num_channels, 8], strides=[1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
+        conv1_0 = self.convolution2d(images, name="conv1_0_op", filter_shape=[5, 5, self.num_channels, 8], strides=[1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
         conv1_1 = self.convolution2d(conv1_0, name="conv1_1_op", filter_shape=[5, 5, 8, 8], strides=[1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
         pool1_0 = self.max_pool(conv1_1, name="pool1_0_op", kernel=[1,5,5,1], strides=[1,2,2,1], ps_device=ps_device, w_device=w_device)
 
@@ -67,7 +80,7 @@ class NN(base_nn.BaseNN):
         conv7_0 = self.convolution2d(concat7_0, name="conv7_0_op", filter_shape=[5, 5, 16, 8], strides=[1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
         conv7_1 = self.convolution2d(conv7_0, name="conv7_1_op", filter_shape=[5, 5, 8, 8], strides=[1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
 
-        final = self.convolution2d(conv7_1, name="final", filter_shape=[1, 1, 8, 1], strides=[1,1,1,1], padding="SAME", activation=None, ps_device=ps_device, w_device=w_device)
+        final = self.convolution2d(conv7_1, name="final", filter_shape=[1, 1, 8, self.out_channels], strides=[1,1,1,1], padding="SAME", activation=None, ps_device=ps_device, w_device=w_device)
 
         return final
 
@@ -90,7 +103,7 @@ class NN(base_nn.BaseNN):
             return metrics_obj
 
 
-    def training(self, loss, learning_rate, decay_steps, decay_rate):
+    def training(self, loss, learning_rate, decay_steps, decay_rate, staircase):
         
         global_step = tf.Variable(0, name='global_step', trainable=False)
 
@@ -98,7 +111,7 @@ class NN(base_nn.BaseNN):
         lr = tf.train.exponential_decay( learning_rate,
                                          global_step,
                                          decay_steps,
-                                         decay_rate, staircase=True )
+                                         decay_rate, staircase=staircase )
 
         tf.summary.scalar('2learning_rate', lr )
 
