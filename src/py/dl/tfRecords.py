@@ -129,6 +129,8 @@ def main(args):
 	for fobj in csv_rows:
 		
 		feature = {}
+		# This seed is only used when images of different sizes are used
+		random_delta_seed = None
 
 		try:
 
@@ -145,16 +147,28 @@ def main(args):
 					
 					img_np = itk.GetArrayViewFromImage(img).astype(float)
 					if(args.resize):
+						obj["resize"] = args.resize
+						
 						resize_shape = list(args.resize)
 						if(img.GetNumberOfComponentsPerPixel() > 1):
 							resize_shape += [img.GetNumberOfComponentsPerPixel()]
 						img_np_x =  np.zeros(resize_shape)
 
 						img_np_assign_shape = []
-						for s in img_np.shape:
-							img_np_assign_shape.append("0:" + str(s))
+						# Compute the difference between the shapes
+						delta_shape = np.array(resize_shape) - np.array(img_np.shape)
+						if(not random_delta_seed):
+							# We have to use the same seed in the case we are storing multiple images, i.e., per input row
+							random_delta_seed = np.random.rand(delta_shape.size)
+						random_delta = (random_delta_seed*delta_shape).astype(int)
 
-						assign_img = "img_np_x[" + ",".join(img_np_assign_shape) + "]=img_np"
+						# We create the assign operation using the random_delta. We don't want the network to be specific to 
+						# the image position
+						for s, r in zip(img_np.shape, random_delta):
+							img_np_assign_shape.append(str(r) + ":" + str(s+r))
+
+						assign_img = "img_np_x[" + ",".join(img_np_assign_shape) + "] = img_np"
+
 						exec(assign_img)
 						img_np = img_np_x
 
@@ -172,6 +186,7 @@ def main(args):
 						img_shape = img_shape + [1]
 
 					if(not "shape" in obj[key]):
+						print("Shape", key, img_shape)
 						obj[key]["shape"] = img_shape
 					else:
 						if not np.all(np.equal(obj[key]["shape"] , img_shape)):
