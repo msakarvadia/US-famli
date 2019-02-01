@@ -123,6 +123,70 @@ class BaseNN:
 
                 return conv_op
 
+    # x=[batch, in_depth, in_height, in_width, in_channels]
+    # filter_shape=[filter_depth, filter_height, filter_width, in_channels, out_channels]
+    def convolution3d(self, x, filter_shape, name='conv3d', strides=[1,1,1,1,1], activation=tf.nn.relu, padding="SAME", ps_device="/cpu:0", w_device="/gpu:0"):
+
+        with tf.variable_scope(name):
+            with tf.device(ps_device):
+                w_conv_name = 'w_' + name
+                # filter_shape=[in_time,in_channels,out_channels]
+                w_conv = tf.get_variable(w_conv_name, shape=filter_shape, dtype=tf.float32, initializer=tf.truncated_normal_initializer(mean=0,stddev=0.1))
+                self.print_tensor_shape( w_conv, name + ' weight shape')
+
+                b_conv_name = 'b_' + name
+                b_conv = tf.get_variable(b_conv_name, shape=[filter_shape[-1]])
+                self.print_tensor_shape( b_conv, name + ' bias shape')
+
+            with tf.device(w_device):
+                conv_op = tf.nn.conv3d( x, w_conv, strides=strides, padding=padding, name='conv_op' )
+                self.print_tensor_shape( conv_op, name + ' shape')
+
+                conv_op = tf.nn.bias_add(conv_op, b_conv, name='bias_add_op')
+
+                if(activation):
+                    conv_op = activation( conv_op, name='relu_op' ) 
+                    self.print_tensor_shape( conv_op, name + ' relu_op shape')
+
+                return conv_op
+
+    # x=[batch, in_depth, in_height, in_width, in_channels]
+    # filter_shape=[filter_depth, filter_height, filter_width, in_channels, out_channels]
+    def up_convolution3d(self, x, filter_shape, output_shape, name='up_conv3d', strides=[1,1,1,1,1], activation=tf.nn.relu, padding="SAME", ps_device="/cpu:0", w_device="/gpu:0"):
+
+        with tf.variable_scope(name):
+            with tf.device(ps_device):
+                w_conv_name = 'w_' + name
+                w_conv = tf.get_variable(w_conv_name, shape=filter_shape, dtype=tf.float32, initializer=tf.truncated_normal_initializer(mean=0,stddev=0.1))
+                self.print_tensor_shape( w_conv, name + ' weight shape')
+
+                b_conv_name = 'b_' + name
+                b_conv = tf.get_variable(b_conv_name, shape=[filter_shape[-2]])
+                self.print_tensor_shape( b_conv, name + ' bias shape')
+
+            with tf.device(w_device):
+                conv_op = tf.nn.conv3d_transpose( x, w_conv, output_shape=output_shape, strides=strides, padding=padding, name='up_conv_op' )
+                self.print_tensor_shape( conv_op, name + ' shape')
+
+                conv_op = tf.nn.bias_add(conv_op, b_conv, name='bias_add_op')
+
+                if(activation):
+                    conv_op = activation( conv_op, name='relu_op' ) 
+                    self.print_tensor_shape( conv_op, name + ' relu_op shape')
+
+                return conv_op
+
+    # x=[batch, in_height, in_width, in_channels]
+    # kernel=[k_batch, k_height, k_width, k_channels]
+    def max_pool3d(self, x, name='max_pool', kernel=[1,3,3,3,1], strides=[1,2,2,2,1], padding="SAME", ps_device="/cpu:0", w_device="/gpu:0"):
+
+        with tf.variable_scope(name):
+            with tf.device(w_device):
+                pool_op = tf.nn.max_pool3d( x, kernel, strides=strides, padding=padding, name='max_pool_op' )
+                self.print_tensor_shape( pool_op, name + ' shape')
+
+                return pool_op
+
     # x=[batch, in_height, in_width, in_channels]
     # kernel=[k_batch, k_height, k_width, k_channels]
     def max_pool(self, x, name='max_pool', kernel=[1,3,3,1], strides=[1,2,2,1], padding="SAME", ps_device="/cpu:0", w_device="/gpu:0"):
