@@ -32,6 +32,7 @@ parser.add_argument('--data_description', type=str, help='JSON file created by t
 
 parser.add_argument('--out', type=str, help='Output image, csv, or directory. If --dir flag is used the output image name will be the <Directory set in out flag>/<image filename in directory dir>', default="out")
 parser.add_argument('--out_ext', type=str, help='Output extension for images', default='.nrrd')
+parser.add_argument('--out_basename', type=bool, default=False, help='Keeps only the filename for the output, i.e, does not create a directory structure for the output image filename')
 parser.add_argument('--ow', type=int, help='Overwrite outputs', default=1)
 parser.add_argument('--resize', nargs="+", type=int, help='Resize images during prediction, useful when doing whole directories with images of diferent sizes. This is needed to set the value of the placeholder for tensorflow. e.x. 1500 1500. The image will be resized for the prediction but the original image size will be stored. Do not include the channels/pixel components in the resize parameters', default=None)
 parser.add_argument('--ps_device', help='Process device', type=str, default='/cpu:0')
@@ -125,6 +126,9 @@ else:
         image_dir_filename = img.replace(replace_dir_name, '')
         if(out_ext):
           image_dir_filename = os.path.splitext(image_dir_filename)[0] +  out_ext
+
+        if(args.out_basename):
+          image_dir_filename = os.path.basename(image_dir_filename)
           
         fobj["out"] = os.path.normpath("/".join([out_name, image_dir_filename]))
 
@@ -208,6 +212,9 @@ elif("resize" in data_description):
 if(resize_shape):
   tf_img_shape = [1] + resize_shape + [tf_img_shape[-1]]
 
+print("resize_shape", resize_shape)
+print("tf_img_shape", tf_img_shape)
+
 graph = tf.Graph()
 
 with graph.as_default():
@@ -270,9 +277,10 @@ with graph.as_default():
             assign_img = "label_map=label_map[" + ",".join(prediction_shape) + "]"
             exec(assign_img)
 
-
           #THE NUMBER OF CHANNELS OF THE OUTPUT ARE GIVEN BY THE NEURAL NET
+          label_map = np.array(label_map)
           label_map_reshape = list(img_np.shape)
+
           if(img.GetNumberOfComponentsPerPixel() > 1):
             label_map_reshape[-1] = np.array(label_map).shape[-1]
           
@@ -281,7 +289,12 @@ with graph.as_default():
           label_map = np.around(label_map).astype(np.uint16)
 
           Dimension = len(img.GetLargestPossibleRegion().GetSize())
-          PixelType = itk.ctype('unsigned short')
+
+          if(label_map_reshape[-1] > 1):
+            PixelType = itk.template(img)[1][0]
+          else:
+            PixelType = itk.ctype('unsigned short')
+
           OutputImageType = itk.Image[PixelType, Dimension]
 
           out_img = OutputImageType.New()
