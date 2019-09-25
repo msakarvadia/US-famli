@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<executable>
+  <category>IO</category>
+  <title>Convert Kretz to a normal image</title>
+  <version>1.0.0</version>
+  <description>
+    Convert an image from dumb kretz format to a normal format
+  </description>
+  <contributor>Juan Carlos Prieto</contributor>
+
+  <parameters>
+    <label>Input parameters</label>
+    <description>Input parameters</description>
+
+    <image>
+      <name>inputImageFilename</name>
+      <label>Input volume</label>
+      <channel>input</channel>
+      <description>Input image rgb</description>
+      <longflag>img</longflag>
+    </image>
+
+    <integer-vector>
+      <name>size_vec</name>
+      <longflag>size</longflag>
+      <description>The size of the image in each dimension</description>
+      <label>Size</label>
+      <default>0</default>
+    </integer-vector>
+
+    <float-vector>
+      <name>resol_vec</name>
+      <longflag>resol</longflag>
+      <description>The resolution of the image</description>
+      <label>Resolution</label>
+      <default>1,1,1</default>
+    </float-vector>
+
+    <boolean>
+      <name>flagMask</name>
+      <label>Mask image</label>
+      <channel>input</channel>
+      <description>Creates a mask image?</description>
+      <longflag>mask</longflag>
+    </boolean>
+
+    <boolean>
+      <name>flagNormalise</name>
+      <label>Normalize image</label>
+      <channel>input</channel>
+      <description>Normalize the image</description>
+      <longflag>normalize</longflag>
+    </boolean>
+
+    <boolean>
+      <name>flagDoppler</name>
+      <label>Doppler image</label>
+      <channel>input</channel>
+      <description>Doppler effect in the image</description>
+      <longflag>isDoppler</longflag>
+    </boolean>
+
+  </parameters>
+
+  <parameters>
+    <label>Ouput parameters</label>
+    <description>Output parameters</description>
+
+    <image>
+      <name>outputImageFilename</name>
+      <label>Output label image</label>
+      <channel>output</channel>
+      <description>Write the output of the image</description>
+      <longflag>out</longflag>
+      <default>out.nrrd</default>
+    </image>
+
+  </parameters>
+</executable>

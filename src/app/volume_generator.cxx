@@ -7,10 +7,7 @@
 #include <itkEuler3DTransform.h>
 #include <itkCompositeTransform.h>
 #include <itksys/SystemTools.hxx>
-#include <itkResampleImageFilter.h>
-#include <itkAddImageFilter.h>
 #include <itkTransformFileWriter.h>
-#include <itkThresholdImageFilter.h>
 #include <itkDivideImageFilter.h>
 
 #include <uuid/uuid.h>
@@ -33,9 +30,6 @@ typedef itk::CompositeTransform< double, Dimension > CompositeTransformType;
 typedef CompositeTransformType::Pointer CompositeTransformPointerType;
 typedef itk::Euler3DTransform<double> TransformType;
 typedef TransformType::Pointer TransformPointerType;
-typedef itk::ResampleImageFilter<InputImageType, InputImageType> ResampleImageFilterType;
-typedef itk::AddImageFilter<InputImageType, InputImageType, InputImageType> AddImageFilterType;
-typedef itk::ThresholdImageFilter<InputImageType> ThresholdImageType;
 typedef itk::DivideImageFilter<InputImageType, InputImageType, InputImageType> DivideImageFilterType;
 
 typedef map<string, string> CSVLine;
@@ -173,45 +167,55 @@ int main (int argc, char * argv[]){
     	transform_csv->Translate(translate_offset);
     	transform_csv->SetRotation(rotX, rotY, rotZ);
 
-    	InputImageType::RegionType region = img->GetLargestPossibleRegion();
-    	InputImageType::RegionType::SizeType size = region.GetSize();
-    	InputImageType::SpacingType spacing = img->GetSpacing();
+    	// InputImageType::RegionType region = img->GetLargestPossibleRegion();
+    	// InputImageType::RegionType::SizeType size = region.GetSize();
+    	// InputImageType::SpacingType spacing = img->GetSpacing();
 
-    	InputImageType::PointType origin_point = img->GetOrigin();
-    	InputImageType::PointType end_point;
-    	img->TransformIndexToPhysicalPoint(img->GetLargestPossibleRegion().GetIndex() + img->GetLargestPossibleRegion().GetSize(), end_point);
+    	// InputImageType::PointType origin_point = img->GetOrigin();
+    	// InputImageType::PointType end_point;
+    	// img->TransformIndexToPhysicalPoint(img->GetLargestPossibleRegion().GetIndex() + img->GetLargestPossibleRegion().GetSize(), end_point);
 
-		TransformPointerType transform_orig = TransformType::New();
-    	transform_orig->SetIdentity();
-    	TransformType::OffsetType translate_offset_origin;
-    	translate_offset_origin[0] = -(end_point[0] - origin_point[0])/2.0;
-    	translate_offset_origin[1] = -end_point[1];
-    	translate_offset_origin[2] = 0;
-    	transform_orig->Translate(translate_offset_origin);
+		// TransformPointerType transform_orig = TransformType::New();
+  //   	transform_orig->SetIdentity();
+  //   	TransformType::OffsetType translate_offset_origin;
+  //   	translate_offset_origin[0] = -(end_point[0] - origin_point[0])/2.0;
+  //   	translate_offset_origin[1] = -end_point[1];
+  //   	translate_offset_origin[2] = 0;
+  //   	transform_orig->Translate(translate_offset_origin);
 
     	CompositeTransformPointerType composite_transform = CompositeTransformType::New();
     	composite_transform->AddTransform(transform_csv);
-    	composite_transform->AddTransform(transform_orig);
+    	// composite_transform->AddTransform(transform_orig);
 
     	transform_vector.push_back(composite_transform);
 
-    	itk::TransformFileWriterTemplate<double>::Pointer writer = itk::TransformFileWriterTemplate<double>::New();
-		writer->SetInput(composite_transform);
-		writer->SetFileName("transform.tfm");
-		writer->Update();
+  //   	itk::TransformFileWriterTemplate<double>::Pointer writer = itk::TransformFileWriterTemplate<double>::New();
+		// writer->SetInput(composite_transform);
+		// writer->SetFileName("transform.tfm");
+		// writer->Update();
 		
 		CompositeTransformType::TransformTypePointer inverse_composite_transform = composite_transform->GetInverseTransform();
-		origin_point = inverse_composite_transform->TransformPoint(origin_point);
-		end_point = inverse_composite_transform->TransformPoint(end_point);
-		
-    	min_point[0] = min(min_point[0], min(origin_point[0], end_point[0]));
-    	min_point[1] = min(min_point[1], min(origin_point[1], end_point[1]));
-    	min_point[2] = min(min_point[2], min(origin_point[2], end_point[2]));
 
-		max_point[0] = max(max_point[0], max(end_point[0], origin_point[0]));
-    	max_point[1] = max(max_point[1], max(end_point[1], origin_point[1]));
-    	max_point[2] = max(max_point[2], max(end_point[2], origin_point[2]));
+		InputRegionIteratorType it(img, img->GetLargestPossibleRegion());
+		it.GoToBegin();
 
+		while(!it.IsAtEnd()){
+			it.GetIndex();
+			InputImageType::PointType point;
+			img->TransformIndexToPhysicalPoint(it.GetIndex(), point);
+
+			InputImageType::PointType inverse_point = inverse_composite_transform->TransformPoint(point);
+
+			min_point[0] = min(min_point[0], inverse_point[0]);
+	    	min_point[1] = min(min_point[1], inverse_point[1]);
+	    	min_point[2] = min(min_point[2], inverse_point[2]);
+
+			max_point[0] = max(max_point[0], inverse_point[0]);
+	    	max_point[1] = max(max_point[1], inverse_point[1]);
+	    	max_point[2] = max(max_point[2], inverse_point[2]);
+
+	    	++it;
+		}
     }
 
 	InputImageType::SpacingType spacing;
@@ -246,34 +250,29 @@ int main (int argc, char * argv[]){
 	cout<<output_image->GetLargestPossibleRegion()<<endl;
 
 	for(unsigned i = 0; i < image_vector.size(); i++){
-		ResampleImageFilterType::Pointer resample = ResampleImageFilterType::New();
-		resample->SetInput(image_vector[i]);
-		resample->SetTransform(transform_vector[i].GetPointer());
-		resample->UseReferenceImageOn();
-		resample->SetReferenceImage(output_image);
-		resample->Update();
+		CompositeTransformType::TransformTypePointer inverse_composite_transform = transform_vector[i]->GetInverseTransform();
 
-		AddImageFilterType::Pointer addfilter = AddImageFilterType::New();
-		addfilter->SetInput1(output_image);
-		addfilter->SetInput2(resample->GetOutput());
-		addfilter->Update();
-		output_image = addfilter->GetOutput();
+		InputRegionIteratorType it(image_vector[i], image_vector[i]->GetLargestPossibleRegion());
+		it.GoToBegin();
 
-		if(i > 0){
+		while(!it.IsAtEnd()){
+			it.GetIndex();
+			InputImageType::PointType point;
+			image_vector[i]->TransformIndexToPhysicalPoint(it.GetIndex(), point);
 
-			ThresholdImageType::Pointer threshold = ThresholdImageType::New();
-			threshold->ThresholdAbove(0);
-			threshold->SetOutsideValue(1);
-			threshold->SetInput(resample->GetOutput());
-			threshold->Update();
+			InputImageType::PointType inverse_point = inverse_composite_transform->TransformPoint(point);
 
-			AddImageFilterType::Pointer addfilter = AddImageFilterType::New();
-			addfilter->SetInput1(output_image_count);
-			addfilter->SetInput2(threshold->GetOutput());
-			addfilter->Update();
-			output_image_count = addfilter->GetOutput();			
+			InputImageType::IndexType output_index;
+			output_image->TransformPhysicalPointToIndex(inverse_point, output_index);
+
+			output_image->SetPixel(output_index, output_image->GetPixel(output_index) + it.Get());
+
+			if(i > 0){
+				output_image_count->SetPixel(output_index, output_image_count->GetPixel(output_index) + 1);	
+			}
+
+	    	++it;
 		}
-
 	}
 
 	DivideImageFilterType::Pointer divide = DivideImageFilterType::New();

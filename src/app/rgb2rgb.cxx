@@ -21,8 +21,8 @@ int main (int argc, char * argv[]){
 
     cout << "The input image is: " << inputImageFilename << endl;
 
-    const int dimension = 2;
-    typedef itk::Image< itk::RGBPixel<unsigned char>, dimension> InputRGBImageType;
+    const int dimension = 3;
+    typedef itk::Image< itk::RGBPixel<unsigned short>, dimension> InputRGBImageType;
     typedef itk::ImageFileReader< InputRGBImageType > InputImageRGBFileReaderType;
     
     InputImageRGBFileReaderType::Pointer reader = InputImageRGBFileReaderType::New();
@@ -66,7 +66,7 @@ int main (int argc, char * argv[]){
         writer->SetInput(input_image);
         writer->Update();    
     }else{
-        typedef itk::Image< unsigned char, dimension> OutputComponentImageType;
+        typedef itk::Image< unsigned short, dimension> OutputComponentImageType;
 
         typedef itk::VectorIndexSelectionCastImageFilter<InputRGBImageType, OutputComponentImageType> VectorIndexSelectionCastImageFilterType;
         VectorIndexSelectionCastImageFilterType::Pointer vector_selection = VectorIndexSelectionCastImageFilterType::New();
