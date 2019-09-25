@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="utf-8"?>
+<executable>
+  <category>PROJECT</category>
+  <title>extractMSLesion</title>
+  <version>1.0</version>
+  <contributor>Juan Carlos Prieto</contributor>
+  <parameters>        
+    <label>Input parameters</label>
+    <description>Input parameters</description>
+
+    <string>
+      <name>positionDataCsv</name>      
+      <longflag>csv</longflag>
+      <description>Position data csv</description>
+    </string>
+
+    <string>
+      <name>csvDelimiter</name>      
+      <longflag>csvDelimiter</longflag>
+      <description>Delimiter of the csv</description>
+      <default>,</default>
+    </string>
+
+    <string>
+      <name>csvColumnRotX</name>      
+      <longflag>csvColumnRotX</longflag>
+      <description>Column name for rotation in X</description>
+      <default>rotX</default>
+    </string>
+
+    <string>
+      <name>csvColumnRotY</name>      
+      <longflag>csvColumnRotY</longflag>
+      <description>Column name for rotation in Y</description>
+      <default>rotY</default>
+    </string>
+
+    <string>
+      <name>csvColumnRotZ</name>      
+      <longflag>csvColumnRotZ</longflag>
+      <description>Column name for rotation in Z</description>
+      <default>rotZ</default>
+    </string>
+
+    <string>
+      <name>csvColumnPosX</name>      
+      <longflag>csvColumnPosX</longflag>
+      <description>Column name for position in X</description>
+      <default>posX</default>
+    </string>
+
+    <string>
+      <name>csvColumnPosY</name>      
+      <longflag>csvColumnPosY</longflag>
+      <description>Column name for position in Y</description>
+      <default>posY</default>
+    </string>
+
+    <string>
+      <name>csvColumnPosZ</name>      
+      <longflag>csvColumnPosZ</longflag>
+      <description>Column name for position in Z</description>
+      <default>posZ</default>
+    </string>
+
+    <string>
+      <name>csvColumnImageFilename</name>      
+      <longflag>csvColumnImageFilename</longflag>
+      <description>Column name for image filename</description>
+      <default>image</default>
+    </string>
+
+    <boolean>
+      <name>angleRadians</name>      
+      <longflag>angleRadians</longflag>
+      <description>If the angles are provided in radians set this flag, otherwise a conversion from degrees to radians is done.</description>
+    </boolean>
+    
+  </parameters>
+
+  <parameters>
+    <label>Ouput parameters</label>
+    <description>Output parameters</description>
+
+    <double>
+      <name>spacingX</name>      
+      <longflag>spacingX</longflag>
+      <description>Number of slices in X dimension</description>
+      <default>1</default>
+    </double>
+
+    <double>
+      <name>spacingY</name>      
+      <longflag>spacingY</longflag>
+      <description>Number of slices in Y dimension</description>
+      <default>1</default>
+    </double>
+
+    <double>
+      <name>spacingZ</name>      
+      <longflag>spacingZ</longflag>
+      <description>Number of slices in Z dimension</description>
+      <default>1</default>
+    </double>
+
+    <image>
+      <name>outFileName</name>      
+      <longflag>out</longflag>
+      <description>Output image filename</description>
+      <default>out.nrrd</default>
+    </image>
+
+  </parameters>
+</executable>
