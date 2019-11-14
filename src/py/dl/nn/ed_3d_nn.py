@@ -22,6 +22,8 @@ class NN(base_nn.BaseNN):
                 self.num_channels = self.data_description[data_keys[0]]["shape"][-1]
 
         self.out_channels = self.num_channels
+        self.variables = {}
+        self.losses = {}
 
 
     def inference(self, data_tuple=None, images=None, keep_prob=1, is_training=False, ps_device="/cpu:0", w_device="/gpu:0"):
@@ -36,46 +38,92 @@ class NN(base_nn.BaseNN):
         shape = tf.shape(images)
         batch_size = shape[0]
 
-        images = tf.layers.batch_normalization(images, training=is_training)
+        if(is_training):
 
-        conv1_0 = self.convolution3d(images, name="conv1_0_op", filter_shape=[3, 3, 3, self.num_channels, 16], strides=[1,1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
-        conv1_1 = self.convolution3d(conv1_0, name="conv1_1_op", filter_shape=[3, 3, 3, 16, 16], strides=[1,1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
-        pool1_0 = self.max_pool3d(conv1_0, name="pool1_0_op", kernel=[1,3,3,3,1], strides=[1,2,2,2,1], ps_device=ps_device, w_device=w_device)
+            with tf.variable_scope("layer1") as scope:
+                conv1 = tf.layers.batch_normalization(images, training=is_training)
+                conv1 = self.convolution3d(conv1, name="conv1", filter_shape=[5,5,5,self.num_channels,32], strides=[1,1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
+                conv1 = self.convolution3d(conv1, name="conv2", filter_shape=[5,5,5,32,32], strides=[1,1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
+                conv1 = self.max_pool3d(conv1, name="pool1", kernel=[1,3,3,3,1], strides=[1,2,2,2,1], padding="SAME", ps_device=ps_device, w_device=w_device)
+                conv1 = self.convolution3d(conv1, name="conv3", filter_shape=[1,1,1,32,8], strides=[1,1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
 
-        conv2_0 = self.convolution3d(pool1_0, name="conv2_0_op", filter_shape=[3, 3, 3, 16, 32], strides=[1,1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
-        conv2_1 = self.convolution3d(conv2_0, name="conv2_1_op", filter_shape=[3, 3, 3, 32, 32], strides=[1,1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
-        pool2_0 = self.max_pool3d(conv2_0, name="pool2_0_op", kernel=[1,3,3,3,1], strides=[1,2,2,2,1], ps_device=ps_device, w_device=w_device)
 
-        conv3_0 = self.convolution3d(pool2_0, name="conv3_0_op", filter_shape=[3, 3, 3, 32, 64], strides=[1,1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
-        conv3_1 = self.convolution3d(conv3_0, name="conv3_1_op", filter_shape=[3, 3, 3, 64, 64], strides=[1,1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
-        pool3_0 = self.max_pool3d(conv3_0, name="pool3_0_op", kernel=[1,3,3,3,1], strides=[1,2,2,2,1], ps_device=ps_device, w_device=w_device)
-        
-        pool3_0 = tf.nn.dropout( pool3_0, keep_prob)
+                self.variables["layer1_down"] = conv1
+                
+                conv1 = tf.layers.batch_normalization(conv1, training=is_training)
+                conv1 = tf.nn.dropout(conv1, keep_prob)
+                up_shape = images.get_shape().as_list()
+                up_shape[0] = batch_size
+                up_shape[-1] = 32
+                conv1 = self.convolution3d(conv1, name="up_conv1", filter_shape=[5,5,5,8,32], strides=[1,1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
+                conv1 = self.up_convolution3d(conv1, name="up_pool1", filter_shape=[5,5,5,32,32], output_shape=up_shape, strides=[1,2,2,2,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
+                conv1 = self.convolution3d(conv1, name="up_conv2", filter_shape=[5,5,5,32,32], strides=[1,1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
+                final = self.convolution3d(conv1, name="up_conv3", filter_shape=[1,1,1,32,self.out_channels], strides=[1,1,1,1,1], padding="SAME", activation=None, ps_device=ps_device, w_device=w_device)
+                
 
-        conv4_0 = self.convolution3d(pool3_0, name="conv4_0_op", filter_shape=[3, 3, 3, 64, 64], strides=[1,1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
-        conv4_1 = self.convolution3d(conv4_0, name="conv4_1_op", filter_shape=[3, 3, 3, 64, 64], strides=[1,1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
-        up_out_shape_4 = conv3_0.get_shape().as_list()
-        up_out_shape_4[0] = batch_size
-        up_conv4_0 = self.up_convolution3d(conv4_0, name="up_conv4_0_op", filter_shape=[3, 3, 3, 64, 64], output_shape=up_out_shape_4, strides=[1,2,2,2,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)        
+            with tf.variable_scope("layer2") as scope:
+                conv1 = tf.layers.batch_normalization(self.variables["layer1_down"], training=is_training)
+                conv1 = self.convolution3d(conv1, name="conv1", filter_shape=[5,5,5,8,128], strides=[1,1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
+                conv1 = self.convolution3d(conv1, name="conv2", filter_shape=[5,5,5,128,128], strides=[1,1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
+                conv1 = self.max_pool3d(conv1, name="pool1", kernel=[1,3,3,3,1], strides=[1,2,2,2,1], padding="SAME", ps_device=ps_device, w_device=w_device)
+                conv1 = self.convolution3d(conv1, name="conv3", filter_shape=[1,1,1,128,32], strides=[1,1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
 
-        conv5_0 = self.convolution3d(up_conv4_0, name="conv5_0_op", filter_shape=[3, 3, 3, 64, 64], strides=[1,1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
-        conv5_1 = self.convolution3d(conv5_0, name="conv5_1_op", filter_shape=[3, 3, 3, 64, 64], strides=[1,1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
-        up_out_shape_5 = conv2_0.get_shape().as_list()
-        up_out_shape_5[0] = batch_size
-        up_conv5_0 = self.up_convolution3d(conv5_0, name="up_conv5_0_op", filter_shape=[3, 3, 3, 32, 64], output_shape=up_out_shape_5, strides=[1,2,2,2,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
+                self.variables["layer2_down"] = conv1
+                conv1 = tf.layers.batch_normalization(conv1, training=is_training)
+                conv1 = tf.nn.dropout(conv1, keep_prob)
+                up_shape = self.variables["layer1_down"].get_shape().as_list()
+                up_shape[0] = batch_size
+                up_shape[-1] = 128
+                conv1 = self.convolution3d(conv1, name="up_conv1", filter_shape=[5,5,5,32,128], strides=[1,1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
+                conv1 = self.up_convolution3d(conv1, name="up_pool1", filter_shape=[5,5,5,128,128], output_shape=up_shape, strides=[1,2,2,2,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
+                conv1 = self.convolution3d(conv1, name="up_conv2", filter_shape=[5,5,5,128,128], strides=[1,1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
+                self.variables["layer2_up"] = self.convolution3d(conv1, name="up_conv3", filter_shape=[1,1,1,128,8], strides=[1,1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
 
-        conv6_0 = self.convolution3d(up_conv5_0, name="conv6_0_op", filter_shape=[3, 3, 3, 32, 32], strides=[1,1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
-        conv6_1 = self.convolution3d(conv6_0, name="conv6_1_op", filter_shape=[3, 3, 3, 32, 32], strides=[1,1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
-        up_out_shape_6 = conv1_0.get_shape().as_list()
-        up_out_shape_6[0] = batch_size
-        up_conv6_0 = self.up_convolution3d(conv6_0, name="up_conv6_0_op", filter_shape=[3, 3, 3, 16, 32], output_shape=up_out_shape_6, strides=[1,2,2,2,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
+            return final
 
-        conv7_0 = self.convolution3d(up_conv6_0, name="conv7_0_op", filter_shape=[3, 3, 3, 16, 16], strides=[1,1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
-        conv7_1 = self.convolution3d(conv7_0, name="conv7_1_op", filter_shape=[3, 3, 3, 16, 16], strides=[1,1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
+        else:
 
-        final = self.convolution3d(conv7_1, name="final", filter_shape=[1, 1, 1, 16, self.out_channels], strides=[1,1,1,1,1], padding="SAME", activation=None, ps_device=ps_device, w_device=w_device)
+            with tf.variable_scope("layer1") as scope:
+                conv1 = tf.layers.batch_normalization(images, training=is_training)
+                conv1 = self.convolution3d(conv1, name="conv1", filter_shape=[5,5,5,self.num_channels,32], strides=[1,1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
+                conv1 = self.convolution3d(conv1, name="conv2", filter_shape=[5,5,5,32,32], strides=[1,1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
+                conv1 = self.max_pool3d(conv1, name="pool1", kernel=[1,3,3,3,1], strides=[1,2,2,2,1], padding="SAME", ps_device=ps_device, w_device=w_device)
+                conv1 = self.convolution3d(conv1, name="conv3", filter_shape=[1,1,1,32,8], strides=[1,1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
 
-        return final
+                self.variables["layer1_down"] = conv1
+
+            with tf.variable_scope("layer2") as scope:
+                conv1 = self.convolution3d(self.variables["layer1_down"], name="conv1", filter_shape=[5,5,5,8,128], strides=[1,1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
+                conv1 = self.convolution3d(conv1, name="conv2", filter_shape=[5,5,5,128,128], strides=[1,1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
+                conv1 = self.max_pool3d(conv1, name="pool1", kernel=[1,3,3,3,1], strides=[1,2,2,2,1], padding="SAME", ps_device=ps_device, w_device=w_device)
+                conv1 = self.convolution3d(conv1, name="conv3", filter_shape=[1,1,1,128,32], strides=[1,1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
+
+                self.variables["layer2_down"] = conv1
+
+                # return self.variables["layer2_down"]
+            
+                up_shape = self.variables["layer1_down"].get_shape().as_list()
+                up_shape[0] = batch_size
+                up_shape[-1] = 128
+                conv1 = self.convolution3d(self.variables["layer2_down"], name="up_conv1", filter_shape=[5,5,5,32,128], strides=[1,1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
+                return conv1
+                conv1 = self.up_convolution3d(conv1, name="up_pool1", filter_shape=[5,5,5,128,128], output_shape=up_shape, strides=[1,2,2,2,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
+                conv1 = self.convolution3d(conv1, name="up_conv2", filter_shape=[5,5,5,128,128], strides=[1,1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
+                self.variables["layer2_up"] = self.convolution3d(conv1, name="up_conv3", filter_shape=[1,1,1,128,8], strides=[1,1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
+
+                return self.variables["layer2_up"]
+
+            with tf.variable_scope("layer1", reuse=tf.AUTO_REUSE) as scope:
+                up_shape = images.get_shape().as_list()
+                up_shape[0] = batch_size
+                up_shape[-1] = 32
+                conv1 = self.convolution3d(self.variables["layer2_up"], name="up_conv1", filter_shape=[5,5,5,8,32], strides=[1,1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
+                conv1 = self.up_convolution3d(conv1, name="up_pool1", filter_shape=[5,5,5,32,32], output_shape=up_shape, strides=[1,2,2,2,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
+                conv1 = self.convolution3d(conv1, name="up_conv2", filter_shape=[5,5,5,32,32], strides=[1,1,1,1,1], padding="SAME", activation=tf.nn.relu, ps_device=ps_device, w_device=w_device)
+                final = self.convolution3d(conv1, name="up_conv3", filter_shape=[1,1,1,32,self.out_channels], strides=[1,1,1,1,1], padding="SAME", activation=None, ps_device=ps_device, w_device=w_device)
+
+            return final
+
 
     def metrics(self, logits, data_tuple, name='collection_metrics'):
 
@@ -85,9 +133,9 @@ class NN(base_nn.BaseNN):
 
             metrics_obj = {}
             
-            metrics_obj["MEAN_ABSOLUTE_ERROR"] = tf.metrics.mean_absolute_error(predictions=logits, labels=labels, weights=weight_map, name='mean_absolute_error')
-            metrics_obj["MEAN_SQUARED_ERROR"] = tf.metrics.mean_squared_error(predictions=logits, labels=labels, weights=weight_map, name='mean_squared_error')
-            metrics_obj["ROOT_MEAN_SQUARED_ERROR"] = tf.metrics.root_mean_squared_error(predictions=logits, labels=labels, weights=weight_map, name='root_mean_squared_error')
+            metrics_obj["MEAN_ABSOLUTE_ERROR_L1"] = tf.metrics.mean_absolute_error(predictions=logits, labels=labels, weights=weight_map, name='mean_absolute_error_l1')
+            metrics_obj["MEAN_ABSOLUTE_ERROR_L2"] = tf.metrics.mean_absolute_error(predictions=self.variables["layer2_up"], labels=self.variables["layer1_down"], weights=weight_map, name='mean_absolute_error_l2')
+            # metrics_obj["MEAN_ABSOLUTE_ERROR_L3"] = tf.metrics.mean_absolute_error(predictions=self.variables["layer3_up"], labels=self.variables["layer2_down"], weights=weight_map, name='mean_absolute_error_l3')
             
             
             for key in metrics_obj:
@@ -98,7 +146,7 @@ class NN(base_nn.BaseNN):
 
     def training(self, loss, learning_rate, decay_steps, decay_rate, staircase):
         
-        global_step = tf.Variable(0, name='global_step', trainable=False)
+        global_step = tf.Variable(self.global_step, name='global_step', trainable=False)
 
         # create learning_decay
         lr = tf.train.exponential_decay( learning_rate,
@@ -108,15 +156,40 @@ class NN(base_nn.BaseNN):
 
         tf.summary.scalar('2learning_rate', lr )
 
-        # Create the gradient descent optimizer with the given learning rate.
         optimizer = tf.train.AdamOptimizer(lr)
 
-        # Use the optimizer to apply the gradients that minimize the loss
         update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
         with tf.control_dependencies(update_ops):
-          train_op = optimizer.minimize(loss, global_step=global_step)
+          train_op = optimizer.minimize(tf.math.add(loss, self.losses["layer2_loss"]), global_step=global_step)
 
         return train_op
+
+        # vars_train = tf.trainable_variables()
+
+        # with tf.variable_scope("layer1") as scope:
+        #     optimizer = tf.train.AdamOptimizer(lr)
+        #     # Use the optimizer to apply the gradients that minimize the loss
+        #     update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+        #     with tf.control_dependencies(update_ops):
+        #       train_op_layer1 = optimizer.minimize(loss, global_step=global_step, var_list=[var for var in vars_train if 'layer1' in var.name])
+
+        # with tf.variable_scope("layer2") as scope:
+        #     optimizer = tf.train.AdamOptimizer(lr)
+        #     # Use the optimizer to apply the gradients that minimize the loss
+        #     update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+        #     with tf.control_dependencies(update_ops):
+        #         print([var for var in vars_train if 'layer2' in var.name])
+        #         train_op_layer2 = optimizer.minimize(self.losses["layer2_loss"], global_step=global_step, var_list=[var for var in vars_train if 'layer2' in var.name])
+
+        # # with tf.variable_scope("layer3") as scope:
+        # #     optimizer = tf.train.AdamOptimizer(lr)
+        # #     # Use the optimizer to apply the gradients that minimize the loss
+        # #     update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+        # #     with tf.control_dependencies(update_ops):
+        # #       train_op_layer3 = optimizer.minimize(self.losses["layer3_loss"], global_step=global_step, var_list=[var for var in vars_train if 'layer3' in var.name])
+
+        # # return tf.group(train_op_layer1, train_op_layer2, train_op_layer3)
+        # return tf.group(train_op_layer1, train_op_layer2)
 
     def loss(self, logits, data_tuple, class_weights=None):
 
@@ -127,6 +200,9 @@ class NN(base_nn.BaseNN):
 
         shape = tf.shape(logits)
         batch_size = shape[0]
+
+        self.losses["layer2_loss"] = tf.losses.absolute_difference(predictions=tf.reshape(self.variables["layer2_up"], [batch_size, -1]), labels=tf.reshape(self.variables["layer1_down"], [batch_size, -1]))
+        # self.losses["layer3_loss"] = tf.losses.absolute_difference(predictions=tf.reshape(self.variables["layer3_up"], [batch_size, -1]), labels=tf.reshape(self.variables["layer2_down"], [batch_size, -1]))
 
         logits_flat = tf.reshape(logits, [batch_size, -1])
         labels_flat = tf.reshape(labels, [batch_size, -1])
