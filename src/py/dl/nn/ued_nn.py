@@ -105,7 +105,7 @@ class NN(base_nn.BaseNN):
 
     def training(self, loss, learning_rate, decay_steps, decay_rate, staircase):
         
-        global_step = tf.Variable(0, name='global_step', trainable=False)
+        global_step = tf.Variable(self.global_step, name='global_step', trainable=False)
 
         # create learning_decay
         lr = tf.train.exponential_decay( learning_rate,

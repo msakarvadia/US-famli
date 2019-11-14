@@ -17,6 +17,15 @@ class BaseNN:
         self.json_filename = ""
         self.data_description = {}
         self.keys_to_features = {}
+        self.num_channels = 1
+        self.out_channels = 1
+        self.global_step = 0
+
+    def set_global_step(self, step):
+        self.global_step = step
+
+    def get_global_step(self):
+        return self.global_step
 
     def set_data_description(self, json_filename=None, data_description=None):
 
@@ -45,7 +54,9 @@ class BaseNN:
             for data_key in self.data_description["data_keys"]:
                 reshaped_parsed.append(tf.reshape(parsed[data_key], self.data_description[data_key]["shape"]))
 
-        return tuple(reshaped_parsed)
+            return tuple(reshaped_parsed)
+
+        return parsed
 
     def inputs(self, batch_size=1, num_epochs=1, buffer_size=1000):
 
@@ -54,8 +65,10 @@ class BaseNN:
         for tfr in glob.iglob(tfrecords_dir, recursive=True):
           tfrecords_arr.append(tfr)
 
+        if((1, 15, 0) <= tuple([int(num) for num in tf.__version__.split('.')])):
+            tf.data.experimental.ignore_errors()
+
         dataset = tf.data.TFRecordDataset(tfrecords_arr)
-        
         dataset = dataset.map(self.read_and_decode)
         dataset = dataset.shuffle(buffer_size=buffer_size)
         dataset = dataset.batch(batch_size)
@@ -194,6 +207,24 @@ class BaseNN:
         with tf.variable_scope(name):
             with tf.device(w_device):
                 pool_op = tf.nn.max_pool( x, kernel, strides=strides, padding=padding, name='max_pool_op' )
+                self.print_tensor_shape( pool_op, name + ' shape')
+
+                return pool_op
+
+    def avg_pool3d(self, x, name='avg_pool', kernel=[1,3,3,3,1], strides=[1,2,2,2,1], padding="SAME", ps_device="/cpu:0", w_device="/gpu:0"):
+
+        with tf.variable_scope(name):
+            with tf.device(w_device):
+                pool_op = tf.nn.avg_pool3d( x, kernel, strides=strides, padding=padding, name='max_pool_op' )
+                self.print_tensor_shape( pool_op, name + ' shape')
+
+                return pool_op
+
+    def avg_pool(self, x, name='avg_pool', kernel=[1,3,3,1], strides=[1,2,2,1], padding="SAME", ps_device="/cpu:0", w_device="/gpu:0"):
+
+        with tf.variable_scope(name):
+            with tf.device(w_device):
+                pool_op = tf.nn.avg_pool( x, kernel, strides=strides, padding=padding, name='max_pool_op' )
                 self.print_tensor_shape( pool_op, name + ' shape')
 
                 return pool_op

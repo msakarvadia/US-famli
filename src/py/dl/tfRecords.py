@@ -150,6 +150,7 @@ def main(args):
 						obj["resize"] = args.resize
 						
 						resize_shape = list(args.resize)
+						print("Num components", img.GetNumberOfComponentsPerPixel())
 						if(img.GetNumberOfComponentsPerPixel() > 1):
 							resize_shape += [img.GetNumberOfComponentsPerPixel()]
 						img_np_x =  np.zeros(resize_shape)
@@ -168,7 +169,6 @@ def main(args):
 							img_np_assign_shape.append(str(r) + ":" + str(s+r))
 
 						assign_img = "img_np_x[" + ",".join(img_np_assign_shape) + "] = img_np"
-
 						exec(assign_img)
 						img_np = img_np_x
 
@@ -248,7 +248,7 @@ def main(args):
 
 			fobj["tfRecord"] = record_path
 
-			writer = tf.python_io.TFRecordWriter(record_path)
+			writer = tf.io.TFRecordWriter(record_path)
 			example = tf.train.Example(features=tf.train.Features(feature=feature))
 
 			print("Writing record", fobj)

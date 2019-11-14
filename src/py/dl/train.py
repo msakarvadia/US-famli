@@ -18,20 +18,26 @@ in_group = parser.add_mutually_exclusive_group(required=True)
 in_group.add_argument('--args', help='JSON file with arguments.', type=str)
 in_group.add_argument('--json', type=str, help='json file with the description of the inputs, generate it with tfRecords.py')
 
-parser.add_argument('--nn', type=str, help='Type of neural network to use', default='u_nn')
-parser.add_argument('--out', help='Output dirname for the model', default="./out")
-parser.add_argument('--model', help='Output modelname, the output name will be <out directory>/model-<num step>', default="model")
+output_param_group = parser.add_argument_group('Output')
+output_param_group.add_argument('--out', help='Output dirname for the model', default="./out")
+output_param_group.add_argument('--model', help='Output modelname, the output name will be <out directory>/model-<num step>', default="model")
 
-parser.add_argument('--keep_prob', help='The probability that each element is kept during training', type=float, default=0.5)
-parser.add_argument('--learning_rate', help='Learning rate, default=1e-5', type=float, default=1e-5)
-parser.add_argument('--decay_rate', help='decay rate, default=0.96', type=float, default=0.96)
-parser.add_argument('--decay_steps', help='decay steps, default=10000', type=int, default=1000)
-parser.add_argument('--staircase', help='staircase decay', type=bool, default=False)
-parser.add_argument('--batch_size', help='Batch size for evaluation', type=int, default=8)
-parser.add_argument('--num_epochs', help='Number of epochs', type=int, default=10)
-parser.add_argument('--buffer_size', help='Shuffle buffer size', type=int, default=1000)
-parser.add_argument('--ps_device', help='Process device', type=str, default='/cpu:0')
-parser.add_argument('--w_device', help='Worker device', type=str, default='/cpu:0')
+train_param_group = parser.add_argument_group('Training parameters')
+train_param_group.add_argument('--nn', type=str, help='Type of neural network to use', default='u_nn')
+train_param_group.add_argument('--keep_prob', help='The probability that each element is kept during training', type=float, default=0.5)
+train_param_group.add_argument('--learning_rate', help='Learning rate, default=1e-5', type=float, default=1e-5)
+train_param_group.add_argument('--decay_rate', help='decay rate, default=0.96', type=float, default=0.96)
+train_param_group.add_argument('--decay_steps', help='decay steps, default=10000', type=int, default=1000)
+train_param_group.add_argument('--staircase', help='staircase decay', type=bool, default=False)
+train_param_group.add_argument('--batch_size', help='Batch size for evaluation', type=int, default=8)
+train_param_group.add_argument('--num_epochs', help='Number of epochs', type=int, default=10)
+train_param_group.add_argument('--buffer_size', help='Shuffle buffer size', type=int, default=1000)
+train_param_group.add_argument('--ps_device', help='Process device', type=str, default='/cpu:0')
+train_param_group.add_argument('--w_device', help='Worker device', type=str, default='/cpu:0')
+
+continue_param_group = parser.add_argument_group('Continue training', 'Use a previously saved model to continue the training.')
+continue_param_group.add_argument('--in_model', help='Input model name', default=None)
+continue_param_group.add_argument('--in_step', type=int, help='Set the step number to start', default=0)
 
 args = parser.parse_args()
 
@@ -50,11 +56,14 @@ buffer_size = args.buffer_size
 ps_device = args.ps_device
 w_device = args.w_device
 
+in_model = args.in_model
+in_step = args.in_step
+
 if(args.args):
   with open(args.args, "r") as jsf:
     json_args = json.load(jsf)
 
-    json_filename = json_args["json_filename"] if json_args["json_filename"] else args.json
+    json_filename = json_args["json"] if json_args["json"] else args.json
     neural_network = json_args["nn"] if json_args["nn"] else args.nn
     outvariablesdirname = json_args["out"] if json_args["out"] else args.out
     modelname = json_args["model"] if json_args["model"] else args.model
@@ -68,9 +77,11 @@ if(args.args):
     ps_device = json_args["ps_device"] if json_args["ps_device"] else args.ps_device
     w_device = json_args["w_device"] if json_args["w_device"] else args.w_device
 
-
 nn = importlib.import_module("nn." + neural_network).NN()
 is_gan = "gan" in neural_network
+
+if(in_step > 0):
+  nn.set_global_step(in_step)
 
 print('json', json_filename)
 print('neural_network', neural_network)
@@ -155,12 +166,18 @@ with graph.as_default():
 
       sess.run([tf.global_variables_initializer(), tf.local_variables_initializer()])
       saver = tf.train.Saver()
+
+      if(in_model):
+        saver.restore(sess, in_model)
       # specify where to write the log files for import to TensorBoard
       now = datetime.now()
-      summary_writer = tf.summary.FileWriter(os.path.join(outvariablesdirname, modelname + "-" + now.strftime("%Y%m%d-%H%M%S")), sess.graph)
+
+      summary_path = os.path.join(outvariablesdirname, modelname + "-" + now.strftime("%Y%m%d-%H%M%S"))
+      summary_writer = tf.summary.FileWriter(summary_path, sess.graph)
+      outmodelname = summary_path
 
       sess.run([iterator.initializer])
-      step = 0
+      step = nn.get_global_step()
 
       while True:
         try:
@@ -184,16 +201,31 @@ with graph.as_default():
             # less frequently output checkpoint files.  Used for evaluating the model
           if step % 1000 == 0:
             save_path = saver.save(sess, os.path.join(outvariablesdirname, modelname), global_step=step)
+            print('Saving model:', outmodelname + "-" + str(step))
+            with open(os.path.join(outvariablesdirname, modelname + ".json"), "w") as f:
+              args_dict = vars(args)
+              args_dict["model"] = os.path.basename(outmodelname) + "-" + str(step)
+              args_dict["description"] = nn.get_data_description()
+              if 'args' in args_dict:
+                del args_dict['args']
+              f.write(json.dumps(args_dict))
 
           step += 1
 
         except tf.errors.OutOfRangeError:
           break
 
-      outmodelname = os.path.join(outvariablesdirname, modelname)
       print('Step:', step)
-      print('Saving model:', outmodelname)
+      print('Saving model:', os.path.join(outvariablesdirname, modelname + ".json"))
       saver.save(sess, outmodelname, global_step=step)
+
+      with open(os.path.join(outvariablesdirname, modelname + ".json"), "w") as f:
+        args_dict = vars(args)
+        args_dict["model"] = os.path.basename(modelname) + "-" + str(step)
+        args_dict["description"] = nn.get_data_description()
+        if 'args' in args_dict:
+          del args_dict['args']
+        f.write(json.dumps(args_dict))
 
   else:
     # THIS IS THE STANDARD OPIMIZATION SCHEME FOR NETWORKS SUCH AS UNET, CLASSIFICATION OR LABEL MAPS
@@ -212,14 +244,18 @@ with graph.as_default():
 
       sess.run([tf.global_variables_initializer(), tf.local_variables_initializer()])
       saver = tf.train.Saver()
+
+      if(in_model):
+        saver.restore(sess, in_model)
       # specify where to write the log files for import to TensorBoard
       now = datetime.now()
 
       summary_path = os.path.join(outvariablesdirname, modelname + "-" + now.strftime("%Y%m%d-%H%M%S"))
       summary_writer = tf.summary.FileWriter(summary_path, sess.graph)
+      outmodelname = summary_path
 
       sess.run([iterator.initializer])
-      step = 0
+      step = nn.get_global_step()
 
       while True:
         try:
@@ -227,7 +263,7 @@ with graph.as_default():
           _, loss_value, summary, metrics = sess.run([train_step, loss, summary_op, metrics_eval], feed_dict={keep_prob: k_prob})
 
           if step % 100 == 0:
-            print('OUTPUT: Step %d: loss = %.3f' % (step, loss_value))
+            print('OUTPUT: Step %d: loss = %.5f' % (step, loss_value))
 
             # output some data to the log files for tensorboard
             summary_writer.add_summary(summary, step)
@@ -243,18 +279,25 @@ with graph.as_default():
             # less frequently output checkpoint files.  Used for evaluating the model
           if step % 1000 == 0:
             save_path = saver.save(sess, os.path.join(outvariablesdirname, modelname), global_step=step)
+            print('Saving model:', outmodelname + "-" + str(step))
+            with open(os.path.join(outvariablesdirname, modelname + ".json"), "w") as f:
+              args_dict = vars(args)
+              args_dict["model"] = os.path.basename(modelname) + "-" + str(step)
+              args_dict["description"] = nn.get_data_description()
+              if 'args' in args_dict:
+                del args_dict['args']
+              f.write(json.dumps(args_dict))
 
           step += 1
 
         except tf.errors.OutOfRangeError:
           break
-
-      outmodelname = summary_path
+      
       print('Step:', step)
-      print('Saving model:', outmodelname + "-" + str(step))
+      print('Saving model:', os.path.join(outvariablesdirname, modelname + ".json"))
       saver.save(sess, outmodelname, global_step=step)
 
-      with open(os.path.normpath(summary_path + "-" + str(step) + ".json"), "w") as f:
+      with open(os.path.join(outvariablesdirname, modelname + ".json"), "w") as f:
         args_dict = vars(args)
         args_dict["model"] = os.path.basename(outmodelname) + "-" + str(step)
         args_dict["description"] = nn.get_data_description()

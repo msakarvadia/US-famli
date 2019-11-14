@@ -35,6 +35,7 @@ parser.add_argument('--out_ext', type=str, help='Output extension for images', d
 parser.add_argument('--out_basename', type=bool, default=False, help='Keeps only the filename for the output, i.e, does not create a directory structure for the output image filename')
 parser.add_argument('--ow', type=int, help='Overwrite outputs', default=1)
 parser.add_argument('--resize', nargs="+", type=int, help='Resize images during prediction, useful when doing whole directories with images of diferent sizes. This is needed to set the value of the placeholder for tensorflow. e.x. 1500 1500. The image will be resized for the prediction but the original image size will be stored. Do not include the channels/pixel components in the resize parameters', default=None)
+parser.add_argument('--resize_prediction', type=bool, help='If the resize flag is used and resize_prediction is set to True, the output/prediction will be resized as well. Otherwise, the output of the prediction will be used as the default shape', default=False)
 parser.add_argument('--ps_device', help='Process device', type=str, default='/cpu:0')
 parser.add_argument('--w_device', help='Worker device', type=str, default='/cpu:0')
 
@@ -44,6 +45,7 @@ json_model_name = args.json
 out_name = args.out
 out_ext = args.out_ext
 resize_shape = args.resize
+resize_prediction = args.resize_prediction
 ps_device = args.ps_device
 w_device = args.w_device
 data_description = {} 
@@ -110,7 +112,7 @@ else:
     replace_dir_name = args.dir
     normpath = os.path.normpath("/".join([args.dir, '**', '*']))
     for img in glob.iglob(normpath, recursive=True):
-      if os.path.isfile(img) and True in [ext in img for ext in [".nrrd", ".nii", ".nii.gz", ".mhd", ".dcm", ".jpg", ".png"]]:
+      if os.path.isfile(img) and True in [ext in img for ext in [".nrrd", ".nii", ".nii.gz", ".mhd", ".dcm", ".DCM", ".jpg", ".png"]]:
         image_filenames.append(img)
   elif(args.csv):
     replace_dir_name = args.csv_root_path
@@ -204,15 +206,14 @@ except Exception as e:
   print("Error reading image to get shape info for prediction", filenames[0]["img"], e, file=sys.stderr)
   sys.exit()
 
-if(resize_shape):
-  resize_shape = tuple(resize_shape)
-elif("resize" in data_description):
+if("resize" in data_description):
   resize_shape = data_description["resize"]
 
 if(resize_shape):
   tf_img_shape = [1] + resize_shape + [tf_img_shape[-1]]
 
 print("resize_shape", resize_shape)
+print("resize_prediction", resize_prediction)
 print("tf_img_shape", tf_img_shape)
 
 graph = tf.Graph()
@@ -267,46 +268,71 @@ with graph.as_default():
         label_map = sess.run([label], feed_dict={x: img_np_x.astype(np.float32)})
 
         if(class_prediction):
+          print("Prediction:", class_obj[np.argmax(label_map[0])])
           class_prediction_arr.append({
             "img": img_obj["img"],
             "class": class_obj[np.argmax(label_map[0])],
             "prob": label_map[0].tolist()
             })
         elif(nn.prediction_type() == "image" or nn.prediction_type() == "segmentation"):
-          if(resize_shape):
-            assign_img = "label_map=label_map[" + ",".join(prediction_shape) + "]"
+          if(resize_shape and resize_prediction):
+            label_map = np.array(label_map)
+            assign_img = "label_map=label_map[0:1," + ",".join(prediction_shape) + "]"
             exec(assign_img)
 
           #THE NUMBER OF CHANNELS OF THE OUTPUT ARE GIVEN BY THE NEURAL NET
-          label_map = np.array(label_map)
-          label_map_reshape = list(img_np.shape)
 
-          if(img.GetNumberOfComponentsPerPixel() > 1):
-            label_map_reshape[-1] = np.array(label_map).shape[-1]
+          Dimension = itk.template(img)[1][1]
+
+          label_map = np.array(label_map[0][0])
+          PixelDimension = label_map.shape[-1]
           
-          label_map = np.reshape(label_map, label_map_reshape)
-          label_map = np.absolute(label_map)
-          label_map = np.around(label_map).astype(np.uint16)
+          if(PixelDimension < 7):
+            if(PixelDimension >= 3 and os.path.splitext(img_obj["out"])[1] not in ['.jpg', '.png']):
+              ComponentType = itk.ctype('float')
+              PixelType = itk.Vector[ComponentType, PixelDimension]
+            elif(PixelDimension == 3):
+              PixelType = itk.RGBPixel.UC
+              label_map = np.absolute(label_map)
+              label_map = np.around(label_map).astype(np.uint16)
+            else:
+              PixelType = itk.US
+              label_map = np.absolute(label_map)
+              label_map = np.around(label_map).astype(np.uint16)
 
-          Dimension = len(img.GetLargestPossibleRegion().GetSize())
+            OutputImageType = itk.Image[PixelType, Dimension]
+            out_img = OutputImageType.New()
 
-          if(label_map_reshape[-1] > 1):
-            PixelType = itk.template(img)[1][0]
           else:
-            PixelType = itk.ctype('unsigned short')
 
-          OutputImageType = itk.Image[PixelType, Dimension]
+            ComponentType = itk.ctype('float')
+            OutputImageType = itk.VectorImage[ComponentType, Dimension]
 
-          out_img = OutputImageType.New()
+            out_img = OutputImageType.New()
+            out_img.SetNumberOfComponentsPerPixel(PixelDimension)
+            
+          size = itk.Size[Dimension]()
+          label_map_shape = list(label_map.shape[0:-1])
+          label_map_shape.reverse()
+          for i, s in enumerate(label_map_shape):
+            size[i] = s
 
-          out_img.SetRegions(img.GetLargestPossibleRegion())
+          index = itk.Index[Dimension]()
+          index.Fill(0)
+
+          RegionType = itk.ImageRegion[Dimension]
+          region = RegionType()
+          region.SetIndex(index)
+          region.SetSize(size)
+          
+          # out_img.SetRegions(img.GetLargestPossibleRegion())
+          out_img.SetRegions(region)
           out_img.SetDirection(img.GetDirection())
           out_img.SetOrigin(img.GetOrigin())
           out_img.SetSpacing(img.GetSpacing())
           out_img.Allocate()
 
           out_img_np = itk.GetArrayViewFromImage(out_img)
-
           out_img_np.setfield(np.reshape(label_map, out_img_np.shape), out_img_np.dtype)
 
           print("Writing:", img_obj["out"])
