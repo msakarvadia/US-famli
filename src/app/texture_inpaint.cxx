@@ -57,7 +57,7 @@ int main (int argc, char * argv[]){
     typedef itk::ImageRegionIterator< InputImageType > ImageRegionIteratorType;
     typedef itk::ImageRandomConstIteratorWithIndex< InputImageType > RandomConstImageRegionIteratorType;
 
-    InputImagePointerType imgin = 0;
+    InputImagePointerType imgin;
 
     InputImageType::SizeType radius;
 
@@ -110,7 +110,7 @@ int main (int argc, char * argv[]){
     readerlm->Update();
     InputLabelImagePointerType labelimage = readerlm->GetOutput();
 
-    InputLabelImagePointerType maskImage = 0;
+    InputLabelImagePointerType maskImage;
     if(inputMaskFilename.compare("") != 0){
         InputImageLabelFileReaderPointerType readerm = InputLabelImageFileReaderType::New();
         readerm->SetFileName(inputMaskFilename);

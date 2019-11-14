@@ -33,7 +33,7 @@ int main (int argc, char * argv[]){
     typedef InputImageType::Pointer InputImagePointerType;
 
     typedef itk::ImageRegionIterator< InputImageType > ImageRegionIteratorType;
-    InputImagePointerType imgin = 0;
+    InputImagePointerType imgin;
 
     if(!lumFilter){
 
@@ -75,7 +75,7 @@ int main (int argc, char * argv[]){
     readerlm->Update();
     InputLabelImagePointerType labelimage = readerlm->GetOutput();
     
-    InputLabelImagePointerType maskimage = 0;
+    InputLabelImagePointerType maskimage;
 
     if(inputMaskFilename.compare("") != 0){
         InputImageLabelFileReaderPointerType readermask = InputLabelImageFileReaderType::New();

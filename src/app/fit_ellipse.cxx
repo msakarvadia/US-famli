@@ -239,7 +239,7 @@ int main (int argc, char * argv[]){
                         double xha = xy[0]*xy[0]/(ab[0]*ab[0]);
                         double y_e = sqrt((1.0 - xha)*(ab[1]*ab[1]));
                         
-                        if(!isnan(y_e) && -y_e <= xy[1] && xy[1] <= y_e){
+                        if(!std::isnan((double)y_e) && -y_e <= xy[1] && xy[1] <= y_e){
                             itout.Set(1);
                         }
 

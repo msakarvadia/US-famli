@@ -99,7 +99,7 @@ int main (int argc, char * argv[]){
 		cout<<"The region contains label: "<<labelValueContains<<", ratiomax: "<<labelValueContainsPercentageMax<<endl;
 	}
 
-	VectorImageType::Pointer vectorcomposeimage = 0;
+	VectorImageType::Pointer vectorcomposeimage;
 
 	if(composeImages){
 		ComposeImageFilterType::Pointer composeImageFilter = ComposeImageFilterType::New();
@@ -111,7 +111,7 @@ int main (int argc, char * argv[]){
 		vectorcomposeimage = composeImageFilter->GetOutput();
 	}
 
-	InputImageLabelType::Pointer labelImage = 0;
+	InputImageLabelType::Pointer labelImage;
 
 	if(labelImageFilename.compare("") != 0){
 		InputImageLabelFileReaderType::Pointer readimage = InputImageLabelFileReaderType::New();
@@ -120,7 +120,7 @@ int main (int argc, char * argv[]){
 		labelImage = readimage->GetOutput();	
 	}
 
-	InputImageLabelType::Pointer maskImage = 0;
+	InputImageLabelType::Pointer maskImage;
 
 	if(maskImageFilename.compare("") != 0){
 		InputImageLabelFileReaderType::Pointer readimage = InputImageLabelFileReaderType::New();
@@ -142,8 +142,8 @@ int main (int argc, char * argv[]){
 	radius[1] = neighborhood[1];
 	// radius[2] = neighborhood[2];
 
-	VectorImageType::Pointer vectoroutputimage = 0;
-	InputImagePointerType outputimage = 0;
+	VectorImageType::Pointer vectoroutputimage;
+	InputImagePointerType outputimage;
 
 	if(composeImages){
 		vectoroutputimage = VectorImageType::New();
@@ -180,7 +180,7 @@ int main (int argc, char * argv[]){
 	
 	
 	while(!randomit.IsAtEnd() && numberOfSamples){
-		if(containsLabel(labelImage, radius, randomit.GetIndex(), labelValueContains, labelValueContainsPercentageMax) && (!maskImage || (maskImage && containsLabel(maskImage, radius, randomit.GetIndex(), 1, 1, 1)))){
+		if(containsLabel(labelImage, radius, randomit.GetIndex(), labelValueContains, labelValueContainsPercentageMax) && (!maskImage || (maskImage && containsLabel(maskImage, radius, randomit.GetIndex(), maskValue, 1, 1)))){
 			uuid_t id;
 			uuid_generate(id);
 		  	uuid_unparse(id, uuid);

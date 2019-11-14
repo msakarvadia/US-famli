@@ -11,8 +11,8 @@
 #include <itkNeighborhoodIterator.h>
 #include <itkRGBToLuminanceImageFilter.h>
 #include <itkImageRandomConstIteratorWithIndex.h>
-#include <itkImageDuplicator.h>
 #include <itkConnectedComponentImageFilter.h>
+#include <itkImageDuplicator.h>
 #include <vnl/vnl_sample.h>
 
 
@@ -39,7 +39,7 @@ int main (int argc, char * argv[]){
     typedef InputImageType::Pointer InputImagePointerType;
 
     typedef itk::ImageRegionIterator< InputImageType > ImageRegionIteratorType;
-    InputImagePointerType imgin = 0;
+    InputImagePointerType imgin;
 
     if(!lumFilter){
 
@@ -85,7 +85,7 @@ int main (int argc, char * argv[]){
     typedef InputLabelImageFileReaderType::Pointer InputImageLabelFileReaderPointerType;
 
 
-    InputLabelImagePointerType maskimage = 0;
+    InputLabelImagePointerType maskimage;
 
     if(inputMaskFilename.compare("") != 0){
         InputImageLabelFileReaderPointerType readerlm = InputLabelImageFileReaderType::New();
@@ -99,7 +99,7 @@ int main (int argc, char * argv[]){
     typedef itk::NeighborhoodIterator<InputLabelImageType> InputLabelImageNeighborhoodIteratorType;
     typedef itk::ImageRandomConstIteratorWithIndex< InputImageType > RandomConstImageRegionIteratorType;
 
-    InputLabelImagePointerType labelimage = 0;
+    InputLabelImagePointerType labelimage;
 
     if(inputLabelFilename.compare("") != 0){
         InputImageLabelFileReaderPointerType readerlm = InputLabelImageFileReaderType::New();
@@ -115,6 +115,7 @@ int main (int argc, char * argv[]){
         connected->Update();
 
         typedef itk::LabelStatisticsImageFilter< InputImageType, InputLabelImageType > LabelStatisticsImageFilterType;
+        typedef LabelStatisticsImageFilterType::LabelPixelType                LabelPixelType;
         typedef LabelStatisticsImageFilterType::ValidLabelValuesContainerType ValidLabelValuesType;
         LabelStatisticsImageFilterType::Pointer labelStatisticsImageFilter = LabelStatisticsImageFilterType::New();
         labelStatisticsImageFilter->SetLabelInput( connected->GetOutput() );
@@ -370,6 +371,203 @@ int main (int argc, char * argv[]){
                 }
             }
             ++itoutrand;
+        }
+    }
+
+    if(numSamplesCrossUNC > 0){
+        cout<<"UNC cross small"<<endl;
+        InputImageType::SizeType radius;
+
+        radius[0] = 1;
+        radius[1] = 1;
+        // radius[2] = 0;
+
+        InputImageNeighborhoodIteratorType itout(radius, outputimg, outputimg->GetLargestPossibleRegion());
+
+        RandomConstImageRegionIteratorType itoutrand = RandomConstImageRegionIteratorType(outputimg, outputimg->GetLargestPossibleRegion());
+        itoutrand.SetNumberOfSamples(numSamplesCrossUNC);
+
+        itoutrand.GoToBegin();
+
+        // vector< InputImageNeighborhoodIteratorType::OffsetType > offsets;
+
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){2,-2});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){1,-2});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){0,-2});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-1,-2});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-2,-2});
+
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){2,-1});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){1,-1});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){0,-1});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-1,-1});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-2,-1});
+
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){2,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){1,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){0,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-1,0});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-2,0});
+
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){2,1});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){1,1});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){0,1});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-1,1});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-2,1});
+
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){2,2});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){1,2});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){0,2});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-1,2});
+        // offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-2,2});
+        
+
+        while(!itoutrand.IsAtEnd()){
+            itout.SetLocation(itoutrand.GetIndex());
+
+            if(itout.InBounds() && (!maskimage || maskimage->GetPixel(itoutrand.GetIndex()) != 0)){
+                for(int i = 0; i < itout.Size(); i++){
+                    itout.SetPixel(i, abs(vnl_sample_uniform(itout.GetPixel(i) - 50, itout.GetPixel(i) + 50)));
+                }
+                // for(int i = 0; i < offsets.size(); i++){
+                //     itout.SetPixel(offsets[i], 255);
+                // }
+            }
+            ++itoutrand;
+        }
+    }
+
+    if(numSamplesCrossBigUNC > 0){
+        InputImageType::SizeType radius;
+
+        radius[0] = 5;
+        radius[1] = 5;
+        // radius[2] = 0;
+
+        InputImageNeighborhoodIteratorType itout(radius, outputimg, outputimg->GetLargestPossibleRegion());
+
+        RandomConstImageRegionIteratorType itoutrand = RandomConstImageRegionIteratorType(outputimg, outputimg->GetLargestPossibleRegion());
+        itoutrand.SetNumberOfSamples(numSamplesCrossBigUNC);
+
+        itoutrand.GoToBegin();
+
+        vector< InputImageNeighborhoodIteratorType::OffsetType > offsets;
+        
+        
+    
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-4,0});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-3,0});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){-2,0});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){2,0});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){3,0});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){4,0});
+        
+        
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){0, -4});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){0, -3});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){0, -2});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){0, 2});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){0, 3});
+        offsets.push_back((InputImageNeighborhoodIteratorType::OffsetType){0, 4});
+        
+        
+        
+        while(!itoutrand.IsAtEnd()){
+            itout.SetLocation(itoutrand.GetIndex());
+
+            if(itout.InBounds() && (!maskimage || maskimage->GetPixel(itoutrand.GetIndex()) != 0)){
+                for(int i = 0; i < offsets.size(); i++){
+                    itout.SetPixel(offsets[i], abs(vnl_sample_uniform(220, 230)));
+                }
+                for(int i = 0; i < itout.Size(); i++){
+                    itout.SetPixel(i, abs(vnl_sample_uniform(itout.GetPixel(i) - 10, itout.GetPixel(i) + 10)));
+                }
+            }
+            ++itoutrand;
+        }
+    }
+
+    if(inputSamplesFilename.compare("") != 0 && inputSamplesLabelFilename.compare("") != 0){
+
+        typedef itk::ImageFileReader< InputImageType > InputImageFileReaderType;
+        typedef InputImageFileReaderType::Pointer InputImageFileReaderPointerType;
+
+        typedef itk::LabelStatisticsImageFilter< InputLabelImageType, InputLabelImageType > LabelStatisticsImageFilterType;
+        typedef LabelStatisticsImageFilterType::Pointer LabelStatisticsImageFilterPointerType;
+        typedef LabelStatisticsImageFilterType::LabelPixelType                LabelPixelType;
+        typedef LabelStatisticsImageFilterType::ValidLabelValuesContainerType ValidLabelValuesType;
+        
+        InputImageFileReaderPointerType reader = InputImageFileReaderType::New();
+        reader->SetFileName(inputSamplesFilename.c_str());
+        reader->Update();
+
+        InputImagePointerType imgsamples = reader->GetOutput();
+
+        InputImageLabelFileReaderPointerType readerls = InputLabelImageFileReaderType::New();
+        readerls->SetFileName(inputSamplesLabelFilename);
+        readerls->Update();
+        InputLabelImagePointerType imgsampleslabel = readerls->GetOutput();
+
+        typedef itk::ConnectedComponentImageFilter <InputImageType, InputImageType > ConnectedComponentImageFilterType;
+
+        ConnectedComponentImageFilterType::Pointer connected = ConnectedComponentImageFilterType::New ();
+        connected->SetInput(imgsampleslabel);
+        connected->Update();
+
+        LabelStatisticsImageFilterPointerType labelstats = LabelStatisticsImageFilterType::New();
+
+        labelstats->SetInput(connected->GetOutput());
+        labelstats->SetLabelInput(connected->GetOutput());
+
+        labelstats->Update();
+
+        
+        cout << "Number of labels: " << labelstats->GetNumberOfLabels() << endl;
+        cout << endl;
+
+        RandomConstImageRegionIteratorType itoutrand = RandomConstImageRegionIteratorType(outputimg, outputimg->GetLargestPossibleRegion());
+        itoutrand.SetNumberOfSamples(numSamplesImageLabel);
+
+        itoutrand.GoToBegin();
+
+
+        while(numSamplesImageLabel > 0){
+            
+            LabelPixelType labelValue = (LabelPixelType) (round(vnl_sample_uniform(0, labelstats->GetNumberOfLabels())));
+
+            if ( labelstats->HasLabel(labelValue) ){
+                
+                InputImageType::RegionType region = labelstats->GetRegion( labelValue );
+
+                InputImageType::IndexType middle_index = region.GetIndex();
+                middle_index[0] = middle_index[0] + region.GetSize()[0]/2.0;
+                middle_index[1] = middle_index[1] + region.GetSize()[1]/2.0;
+
+                InputImageType::SizeType radius;
+
+                radius[0] = (region.GetSize()[0] - 1)/2;
+                radius[1] = (region.GetSize()[1] - 1)/2;
+
+                InputLabelImageNeighborhoodIteratorType lit(radius, imgsamples, imgsamples->GetLargestPossibleRegion());
+                InputImageNeighborhoodIteratorType itout(radius, outputimg, outputimg->GetLargestPossibleRegion());
+                
+                lit.SetLocation(middle_index);
+                
+                itout.SetLocation(itoutrand.GetIndex());
+
+                if(lit.InBounds() && itout.InBounds()){
+                    for(int i = 0; i < itout.Size(); i++){
+
+                        if(imgsampleslabel->GetPixel(lit.GetIndex(i))){
+                            double pix = fabs(itout.GetPixel(i)*0.1 + lit.GetPixel(i)*0.9);
+                            itout.SetPixel(i, (InputPixelType)pix);    
+                        }
+                    }
+                }
+            }
+
+            ++itoutrand;
+            --numSamplesImageLabel;
         }
     }
 

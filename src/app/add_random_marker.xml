@@ -53,11 +53,29 @@
     </integer>
 
     <integer>
+      <name>numSamplesCrossUNC</name>
+      <label>Number of samples, in cross shape</label>
+      <channel>input</channel>
+      <description>Number of samples in a cross shape</description>
+      <longflag>samplesCrossUNC</longflag>
+      <default>50</default>
+    </integer>
+
+    <integer>
       <name>numSamplesCrossBig</name>
       <label>Number of samples, in cross shape (big one)</label>
       <channel>input</channel>
       <description>Number of samples in a cross shape but big</description>
       <longflag>samplesCrossBig</longflag>
+      <default>50</default>
+    </integer>
+
+    <integer>
+      <name>numSamplesCrossBigUNC</name>
+      <label>Number of samples, in cross shape (big one)</label>
+      <channel>input</channel>
+      <description>Number of samples in a cross shape but big</description>
+      <longflag>samplesCrossBigUNC</longflag>
       <default>50</default>
     </integer>
 
@@ -69,6 +87,31 @@
       <longflag>lumFilter</longflag>
       <default>0</default>
     </boolean>
+
+    <image>
+      <name>inputSamplesFilename</name>
+      <label>Input US image</label>
+      <channel>input</channel>
+      <description>Input US image for sampling the markers</description>
+      <longflag>samplesImage</longflag>
+    </image>
+
+    <image>
+      <name>inputSamplesLabelFilename</name>
+      <label>Input US label image</label>
+      <channel>input</channel>
+      <description>Input US label image for sampling the markers</description>
+      <longflag>samplesImageLabel</longflag>
+    </image>
+
+    <integer>
+      <name>numSamplesImageLabel</name>
+      <label>Number of samples, to extract from the labeled image</label>
+      <channel>input</channel>
+      <description>Number of samples from the labeled image</description>
+      <longflag>samplesImageNumber</longflag>
+      <default>50</default>
+    </integer>
 
   </parameters>
 

@@ -9,6 +9,8 @@
 #include <itksys/SystemTools.hxx>
 #include <itkTransformFileWriter.h>
 #include <itkDivideImageFilter.h>
+#include <itkListSample.h>
+
 
 #include <uuid/uuid.h>
 #include <iostream>
@@ -134,6 +136,9 @@ int main (int argc, char * argv[]){
     	double rotX = atof(csv_line[csvColumnRotX].c_str());
     	double rotY = atof(csv_line[csvColumnRotY].c_str());
     	double rotZ = atof(csv_line[csvColumnRotZ].c_str());
+    	// double rotX = 0;
+    	// double rotY = 0;
+    	// double rotZ = 0;
     	double posX = atof(csv_line[csvColumnPosX].c_str());
     	double posY = atof(csv_line[csvColumnPosY].c_str());
     	double posZ = atof(csv_line[csvColumnPosZ].c_str());
@@ -156,6 +161,11 @@ int main (int argc, char * argv[]){
     	reader->Update();
 
     	InputImagePointerType img = reader->GetOutput();
+    	// double spacing_img[3];
+    	// spacing_img[0] = 0.25;
+    	// spacing_img[1] = 0.25;
+    	// spacing_img[2] = 1;
+    	// img->SetSpacing(spacing_img);
     	image_vector.push_back(img);
 
     	TransformPointerType transform_csv = TransformType::New();
@@ -178,10 +188,14 @@ int main (int argc, char * argv[]){
 		// TransformPointerType transform_orig = TransformType::New();
   //   	transform_orig->SetIdentity();
   //   	TransformType::OffsetType translate_offset_origin;
-  //   	translate_offset_origin[0] = -(end_point[0] - origin_point[0])/2.0;
-  //   	translate_offset_origin[1] = -end_point[1];
+  //   	translate_offset_origin[0] = (end_point[0] - origin_point[0])/2.0;
+  //   	translate_offset_origin[1] = end_point[1];
   //   	translate_offset_origin[2] = 0;
-  //   	transform_orig->Translate(translate_offset_origin);
+
+    	// cout<<"Origin: "<<origin_point<<endl;
+    	// cout<<"Region: "<<img->GetLargestPossibleRegion()<<endl;
+    	// cout<<"Translate mid point: "<<translate_offset_origin<<endl;
+    	// transform_orig->Translate(translate_offset_origin);
 
     	CompositeTransformPointerType composite_transform = CompositeTransformType::New();
     	composite_transform->AddTransform(transform_csv);
@@ -224,9 +238,9 @@ int main (int argc, char * argv[]){
 	spacing[2] = spacingZ;
 
 	InputImageType::SizeType size;
-	size[0] = abs(ceil((max_point[0] - min_point[0])/spacing[0]));
-	size[1] = abs(ceil((max_point[1] - min_point[1])/spacing[1]));
-	size[2] = abs(ceil((max_point[2] - min_point[2])/spacing[2]));
+	size[0] = abs(ceil((max_point[0] - min_point[0])/spacing[0])) + 1;
+	size[1] = abs(ceil((max_point[1] - min_point[1])/spacing[1])) + 1;
+	size[2] = abs(ceil((max_point[2] - min_point[2])/spacing[2])) + 1;
 	InputImageType::RegionType region;
 	region.SetSize(size);
 	
@@ -256,7 +270,7 @@ int main (int argc, char * argv[]){
 		it.GoToBegin();
 
 		while(!it.IsAtEnd()){
-			it.GetIndex();
+			
 			InputImageType::PointType point;
 			image_vector[i]->TransformIndexToPhysicalPoint(it.GetIndex(), point);
 
@@ -264,7 +278,6 @@ int main (int argc, char * argv[]){
 
 			InputImageType::IndexType output_index;
 			output_image->TransformPhysicalPointToIndex(inverse_point, output_index);
-
 			output_image->SetPixel(output_index, output_image->GetPixel(output_index) + it.Get());
 
 			if(i > 0){
@@ -275,6 +288,7 @@ int main (int argc, char * argv[]){
 		}
 	}
 
+	cout<<"Avg image: "<<outFileName<<endl;
 	DivideImageFilterType::Pointer divide = DivideImageFilterType::New();
 	divide->SetInput1(output_image);
 	divide->SetInput2(output_image_count);

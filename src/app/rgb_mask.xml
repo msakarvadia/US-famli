@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8"?>
+<executable>
+  <category>RGBToLum</category>
+  <title>Convert RGB to RGB filter</title>
+  <version>1.0.0</version>
+  <description>
+    Convert an image from RGB to RGB. You may ask, why? Well, I have a RGBs in nrrd format that won't convert to JPG that's why.
+  </description>
+  <contributor>Juan Carlos Prieto</contributor>
+
+  <parameters>
+    <label>Input parameters</label>
+    <description>Input parameters</description>
+
+    <image>
+      <name>inputImageFilename</name>
+      <label>Input volume</label>
+      <channel>input</channel>
+      <description>Input image rgb</description>
+      <longflag>img</longflag>
+    </image>
+
+    <image>
+      <name>inputMaskFilename</name>
+      <label>Mask the image</label>
+      <channel>input</channel>
+      <description>Input image mask</description>
+      <longflag>mask</longflag>
+    </image>
+
+    <integer>
+      <name>maskingValue</name>
+      <label>Masking value</label>
+      <channel>input</channel>
+      <description>Masking value</description>
+      <longflag>maskingValue</longflag>
+      <default>1</default>
+    </integer>
+
+    <integer>
+      <name>radiusStructuringElement</name>
+      <label>Radius structruing element</label>
+      <channel>input</channel>
+      <description>Radius of the flat structruing element</description>
+      <longflag>radius</longflag>
+      <default>0</default>
+    </integer>
+
+    <integer>
+      <name>dilateMaskValue</name>
+      <label>Dilation value</label>
+      <channel>input</channel>
+      <description>Value for the dilated pixels</description>
+      <longflag>dilateMaskValue</longflag>
+      <default>1</default>
+    </integer>
+
+    <boolean>
+      <name>useBoundingBox</name>
+      <label>Use a bounding box instead of the actual mask, i.e., a bounding box is computed from the mask image. Pixels with value 'inputMaskingValue' are kept</label>
+      <channel>input</channel>
+      <description>Masking value</description>
+      <longflag>useBoundingBox</longflag>
+    </boolean>
+
+    <boolean>
+      <name>useOutsideBoundingBox</name>
+      <label>Mask pixels outside bb</label>
+      <channel>input</channel>
+      <description>Mask pixels outside the bounding box, not inside.</description>
+      <longflag>useOutsideBoundingBox</longflag>
+    </boolean>
+
+  </parameters>
+
+  <parameters>
+    <label>Ouput parameters</label>
+    <description>Output parameters</description>
+
+    <image>
+      <name>outputImageFilename</name>
+      <label>Output label image</label>
+      <channel>output</channel>
+      <description>Write the output of the image</description>
+      <longflag>out</longflag>
+      <default>out.nrrd</default>
+    </image>
+
+  </parameters>
+</executable>

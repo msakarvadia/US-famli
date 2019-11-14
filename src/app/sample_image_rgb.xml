@@ -27,6 +27,13 @@
     </image>
 
     <integer>
+      <name>maskValue</name>
+      <longflag>maskValue</longflag>
+      <default>1</default>
+      <description>Intensity value in the mask</description>
+    </integer>
+
+    <integer>
       <name>labelValueContains</name>
       <longflag>labelValueContains</longflag>
       <default>-1</default>

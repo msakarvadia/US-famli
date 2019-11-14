@@ -37,7 +37,7 @@ void BestEllipseFit::f(vnl_vector< double > const &ab, vnl_vector< double > &fx)
         double xha = xy[0]*xy[0]/(ab[0]*ab[0]);
         xy[1] = sqrt((1.0 - xha)*(ab[1]*ab[1]));
         
-        if(!isnan(xy[0]) && !isnan(xy[1])){
+        if(!std::isnan(xy[0]) && !std::isnan(xy[1])){
 
             cout<<"xy----:"<<xy<<endl;
             xy = this->GetTransform()*xy;
