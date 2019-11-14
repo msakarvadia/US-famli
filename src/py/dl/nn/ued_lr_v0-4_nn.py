@@ -139,13 +139,11 @@ class NN(base_nn.BaseNN):
 
         with tf.variable_scope("layer1", reuse=True):
             labels_conv = tf.layers.batch_normalization(labels, training=False)
-
             labels_conv = self.convolution2d(labels_conv, name="conv1_0_op", filter_shape=[3,3,self.num_channels,8], strides=[1,1,1,1], padding="SAME", activation=tf.nn.leaky_relu, ps_device="/cpu:0", w_device="/gpu:0")
             labels_conv = self.convolution2d(labels_conv, name="conv1_1_op", filter_shape=[3,3,8,8], strides=[1,1,1,1], padding="SAME", activation=tf.nn.leaky_relu, ps_device="/cpu:0", w_device="/gpu:0")
 
         with tf.variable_scope("layer1", reuse=True):
             logits_conv = tf.layers.batch_normalization(logits, training=False)
-
             logits_conv = self.convolution2d(logits_conv, name="conv1_0_op", filter_shape=[3,3,self.num_channels,8], strides=[1,1,1,1], padding="SAME", activation=tf.nn.leaky_relu, ps_device="/cpu:0", w_device="/gpu:0")
             logits_conv = self.convolution2d(logits_conv, name="conv1_1_op", filter_shape=[3,3,8,8], strides=[1,1,1,1], padding="SAME", activation=tf.nn.leaky_relu, ps_device="/cpu:0", w_device="/gpu:0")
 
@@ -157,7 +155,7 @@ class NN(base_nn.BaseNN):
         labels_conv_flat = tf.reshape(labels_conv, [batch_size, -1])
 
         # return tf.pow(tf.norm(logits_flat - labels_flat), 2)/tf.math.reduce_prod(tf.dtypes.cast(shape, tf.float32)[1:])
-        return (tf.losses.absolute_difference(labels=labels_conv_flat, predictions=logits_conv_flat) + 3.0*tf.losses.absolute_difference(labels=labels_flat, predictions=logits_flat))/4.0
+        return tf.losses.mean_squared_error(labels=labels_conv_flat, predictions=logits_conv_flat) + tf.losses.absolute_difference(labels=labels_flat, predictions=logits_flat)
 
     def prediction_type(self):
         return "image"
