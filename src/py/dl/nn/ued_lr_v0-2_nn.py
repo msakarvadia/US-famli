@@ -37,51 +37,53 @@ class NN(base_nn.BaseNN):
         shape = tf.shape(images)
         batch_size = shape[0]
 
-        images = tf.layers.batch_normalization(images, training=is_training)
+        with tf.variable_scope("layer1"):
+            images = tf.layers.batch_normalization(images, training=is_training)
 
-        conv1_0 = self.convolution2d(images, name="conv1_0_op", filter_shape=[3,3,self.num_channels,16], strides=[1,1,1,1], padding="SAME", activation=tf.nn.leaky_relu, ps_device=ps_device, w_device=w_device)
-        conv1_1 = self.convolution2d(conv1_0, name="conv1_1_op", filter_shape=[3,3,16,16], strides=[1,1,1,1], padding="SAME", activation=tf.nn.leaky_relu, ps_device=ps_device, w_device=w_device)
-        pool1_0 = self.max_pool(conv1_1, name="pool1_0_op", kernel=[1,3,3,1], strides=[1,2,2,1], ps_device=ps_device, w_device=w_device)
+            conv1_0 = self.convolution2d(images, name="conv1_0_op", filter_shape=[3,3,self.num_channels,8], strides=[1,1,1,1], padding="SAME", activation=tf.nn.leaky_relu, ps_device=ps_device, w_device=w_device)
+            conv1_1 = self.convolution2d(conv1_0, name="conv1_1_op", filter_shape=[3,3,8,8], strides=[1,1,1,1], padding="SAME", activation=tf.nn.leaky_relu, ps_device=ps_device, w_device=w_device)
+            pool1_0 = self.max_pool(conv1_1, name="pool1_0_op", kernel=[1,3,3,1], strides=[1,2,2,1], ps_device=ps_device, w_device=w_device)
 
-        conv2_0 = self.convolution2d(pool1_0, name="conv2_0_op", filter_shape=[3,3,16,32], strides=[1,1,1,1], padding="SAME", activation=tf.nn.leaky_relu, ps_device=ps_device, w_device=w_device)
-        conv2_1 = self.convolution2d(conv2_0, name="conv2_1_op", filter_shape=[3,3,32,32], strides=[1,1,1,1], padding="SAME", activation=tf.nn.leaky_relu, ps_device=ps_device, w_device=w_device)
+        conv2_0 = self.convolution2d(pool1_0, name="conv2_0_op", filter_shape=[3,3,8,16], strides=[1,1,1,1], padding="SAME", activation=tf.nn.leaky_relu, ps_device=ps_device, w_device=w_device)
+        conv2_1 = self.convolution2d(conv2_0, name="conv2_1_op", filter_shape=[3,3,16,16], strides=[1,1,1,1], padding="SAME", activation=tf.nn.leaky_relu, ps_device=ps_device, w_device=w_device)
         pool2_0 = self.max_pool(conv2_1, name="pool2_0_op", kernel=[1,3,3,1], strides=[1,2,2,1], ps_device=ps_device, w_device=w_device)
 
-        conv3_0 = self.convolution2d(pool2_0, name="conv3_0_op", filter_shape=[3,3,32,64], strides=[1,1,1,1], padding="SAME", activation=tf.nn.leaky_relu, ps_device=ps_device, w_device=w_device)
-        conv3_1 = self.convolution2d(conv3_0, name="conv3_1_op", filter_shape=[3,3,64,64], strides=[1,1,1,1], padding="SAME", activation=tf.nn.leaky_relu, ps_device=ps_device, w_device=w_device)
+        conv3_0 = self.convolution2d(pool2_0, name="conv3_0_op", filter_shape=[3,3,16,32], strides=[1,1,1,1], padding="SAME", activation=tf.nn.leaky_relu, ps_device=ps_device, w_device=w_device)
+        conv3_1 = self.convolution2d(conv3_0, name="conv3_1_op", filter_shape=[3,3,32,32], strides=[1,1,1,1], padding="SAME", activation=tf.nn.leaky_relu, ps_device=ps_device, w_device=w_device)
         pool3_0 = self.max_pool(conv3_1, name="pool3_0_op", kernel=[1,3,3,1], strides=[1,2,2,1], ps_device=ps_device, w_device=w_device)
 
-        conv4_0 = self.convolution2d(pool3_0, name="conv4_0_op", filter_shape=[3,3,64,128], strides=[1,1,1,1], padding="SAME", activation=tf.nn.leaky_relu, ps_device=ps_device, w_device=w_device)
-        conv4_1 = self.convolution2d(conv4_0, name="conv4_1_op", filter_shape=[3,3,128,128], strides=[1,1,1,1], padding="SAME", activation=tf.nn.leaky_relu, ps_device=ps_device, w_device=w_device)
+        conv4_0 = self.convolution2d(pool3_0, name="conv4_0_op", filter_shape=[3,3,32,64], strides=[1,1,1,1], padding="SAME", activation=tf.nn.leaky_relu, ps_device=ps_device, w_device=w_device)
+        conv4_1 = self.convolution2d(conv4_0, name="conv4_1_op", filter_shape=[3,3,64,64], strides=[1,1,1,1], padding="SAME", activation=tf.nn.leaky_relu, ps_device=ps_device, w_device=w_device)
         up_out_shape_4 = conv3_1.get_shape().as_list()
         up_out_shape_4[0] = batch_size
-        up_conv4_0 = self.up_convolution2d(conv4_1, name="up_conv4_0_op", filter_shape=[3,3,64,128], output_shape=up_out_shape_4, strides=[1,2,2,1], padding="SAME", activation=tf.nn.leaky_relu, ps_device=ps_device, w_device=w_device)
+        up_conv4_0 = self.up_convolution2d(conv4_1, name="up_conv4_0_op", filter_shape=[3,3,32,64], output_shape=up_out_shape_4, strides=[1,2,2,1], padding="SAME", activation=tf.nn.leaky_relu, ps_device=ps_device, w_device=w_device)
         up_conv4_0 = self.max_pool(up_conv4_0, name="pool4_0_op", kernel=[1,3,3,1], strides=[1,1,1,1], ps_device=ps_device, w_device=w_device)
         
         concat5_0 = tf.concat([up_conv4_0, tf.nn.dropout( conv3_1, keep_prob)], -1)
 
-        conv5_0 = self.convolution2d(concat5_0, name="conv5_0_op", filter_shape=[3,3,128,64], strides=[1,1,1,1], padding="SAME", activation=tf.nn.leaky_relu, ps_device=ps_device, w_device=w_device)
-        conv5_1 = self.convolution2d(conv5_0, name="conv5_1_op", filter_shape=[3,3,64,64], strides=[1,1,1,1], padding="SAME", activation=tf.nn.leaky_relu, ps_device=ps_device, w_device=w_device)
+        conv5_0 = self.convolution2d(concat5_0, name="conv5_0_op", filter_shape=[5,5,64,32], strides=[1,1,1,1], padding="SAME", activation=tf.nn.leaky_relu, ps_device=ps_device, w_device=w_device)
+        conv5_1 = self.convolution2d(conv5_0, name="conv5_1_op", filter_shape=[3,3,32,32], strides=[1,1,1,1], padding="SAME", activation=tf.nn.leaky_relu, ps_device=ps_device, w_device=w_device)
         up_out_shape_5 = conv2_1.get_shape().as_list()
         up_out_shape_5[0] = batch_size
-        up_conv5_0 = self.up_convolution2d(conv5_1, name="up_conv5_0_op", filter_shape=[3,3,32,64], output_shape=up_out_shape_5, strides=[1,2,2,1], padding="SAME", activation=tf.nn.leaky_relu, ps_device=ps_device, w_device=w_device)
+        up_conv5_0 = self.up_convolution2d(conv5_1, name="up_conv5_0_op", filter_shape=[3,3,16,32], output_shape=up_out_shape_5, strides=[1,2,2,1], padding="SAME", activation=tf.nn.leaky_relu, ps_device=ps_device, w_device=w_device)
         up_conv5_0 = self.max_pool(up_conv5_0, name="pool5_0_op", kernel=[1,3,3,1], strides=[1,1,1,1], ps_device=ps_device, w_device=w_device)
         
         concat6_0 = tf.concat([up_conv5_0, tf.nn.dropout( conv2_1, keep_prob)], -1)
 
-        conv6_0 = self.convolution2d(concat6_0, name="conv6_0_op", filter_shape=[3,3,64,32], strides=[1,1,1,1], padding="SAME", activation=tf.nn.leaky_relu, ps_device=ps_device, w_device=w_device)
-        conv6_1 = self.convolution2d(conv6_0, name="conv6_1_op", filter_shape=[3,3,32,32], strides=[1,1,1,1], padding="SAME", activation=tf.nn.leaky_relu, ps_device=ps_device, w_device=w_device)
+        conv6_0 = self.convolution2d(concat6_0, name="conv6_0_op", filter_shape=[5,5,32,16], strides=[1,1,1,1], padding="SAME", activation=tf.nn.leaky_relu, ps_device=ps_device, w_device=w_device)
+        conv6_1 = self.convolution2d(conv6_0, name="conv6_1_op", filter_shape=[3,3,16,16], strides=[1,1,1,1], padding="SAME", activation=tf.nn.leaky_relu, ps_device=ps_device, w_device=w_device)
         up_out_shape_6 = conv1_1.get_shape().as_list()
         up_out_shape_6[0] = batch_size
-        up_conv6_0 = self.up_convolution2d(conv6_1, name="up_conv6_0_op", filter_shape=[3,3,16,32], output_shape=up_out_shape_6, strides=[1,2,2,1], padding="SAME", activation=tf.nn.leaky_relu, ps_device=ps_device, w_device=w_device)
+        up_conv6_0 = self.up_convolution2d(conv6_1, name="up_conv6_0_op", filter_shape=[3,3,8,16], output_shape=up_out_shape_6, strides=[1,2,2,1], padding="SAME", activation=tf.nn.leaky_relu, ps_device=ps_device, w_device=w_device)
         up_conv6_0 = self.max_pool(up_conv6_0, name="pool6_0_op", kernel=[1,3,3,1], strides=[1,1,1,1], ps_device=ps_device, w_device=w_device)
         
         concat7_0 = tf.concat([up_conv6_0, tf.nn.dropout( conv1_1, keep_prob)], -1)
 
-        conv7_0 = self.convolution2d(concat7_0, name="conv7_0_op", filter_shape=[3,3,32,32], strides=[1,1,1,1], padding="SAME", activation=tf.nn.leaky_relu, ps_device=ps_device, w_device=w_device)
-        conv7_1 = self.convolution2d(conv7_0, name="conv7_1_op", filter_shape=[3,3,32,32], strides=[1,1,1,1], padding="SAME", activation=tf.nn.leaky_relu, ps_device=ps_device, w_device=w_device)
+        conv7_0 = self.convolution2d(concat7_0, name="conv7_0_op", filter_shape=[7,7,16,16], strides=[1,1,1,1], padding="SAME", activation=tf.nn.leaky_relu, ps_device=ps_device, w_device=w_device)
+        conv7_1 = self.convolution2d(conv7_0, name="conv7_1_op", filter_shape=[5,5,16,16], strides=[1,1,1,1], padding="SAME", activation=tf.nn.leaky_relu, ps_device=ps_device, w_device=w_device)
 
-        final = self.convolution2d(conv7_1, name="final", filter_shape=[3,3,32,self.out_channels], strides=[1,1,1,1], padding="SAME", activation=None, ps_device=ps_device, w_device=w_device)
+        conv7_2 = self.convolution2d(conv7_1, name="conv7_2_op", filter_shape=[1,1,16,16], strides=[1,1,1,1], padding="SAME", activation=tf.nn.leaky_relu, ps_device=ps_device, w_device=w_device)
+        final = self.convolution2d(conv7_2, name="final", filter_shape=[1,1,16,self.out_channels], strides=[1,1,1,1], padding="SAME", activation=None, ps_device=ps_device, w_device=w_device)
 
         return final
 
@@ -136,10 +138,27 @@ class NN(base_nn.BaseNN):
         shape = tf.shape(logits)
         batch_size = shape[0]
 
+        with tf.variable_scope("layer1", reuse=True):
+            labels_conv = tf.layers.batch_normalization(labels, training=False)
+            labels_conv = self.convolution2d(labels_conv, name="conv1_0_op", filter_shape=[3,3,self.num_channels,8], strides=[1,1,1,1], padding="SAME", activation=tf.nn.leaky_relu, ps_device="/cpu:0", w_device="/gpu:0")
+            labels_conv = self.convolution2d(labels_conv, name="conv1_1_op", filter_shape=[3,3,8,8], strides=[1,1,1,1], padding="SAME", activation=tf.nn.leaky_relu, ps_device="/cpu:0", w_device="/gpu:0")
+            labels_conv = self.max_pool(labels_conv, name="pool1_0_op", kernel=[1,3,3,1], strides=[1,2,2,1], ps_device="/cpu:0", w_device="/gpu:0")
+
+        with tf.variable_scope("layer1", reuse=True):
+            logits_conv = tf.layers.batch_normalization(logits, training=False)
+            logits_conv = self.convolution2d(logits_conv, name="conv1_0_op", filter_shape=[3,3,self.num_channels,8], strides=[1,1,1,1], padding="SAME", activation=tf.nn.leaky_relu, ps_device="/cpu:0", w_device="/gpu:0")
+            logits_conv = self.convolution2d(logits_conv, name="conv1_1_op", filter_shape=[3,3,8,8], strides=[1,1,1,1], padding="SAME", activation=tf.nn.leaky_relu, ps_device="/cpu:0", w_device="/gpu:0")
+            logits_conv = self.max_pool(logits_conv, name="pool1_0_op", kernel=[1,3,3,1], strides=[1,2,2,1], ps_device="/cpu:0", w_device="/gpu:0")
+
+
         logits_flat = tf.reshape(logits, [batch_size, -1])
         labels_flat = tf.reshape(labels, [batch_size, -1])
 
-        return tf.losses.absolute_difference(predictions=logits_flat, labels=labels_flat)
+        logits_conv_flat = tf.reshape(logits_conv, [batch_size, -1])
+        labels_conv_flat = tf.reshape(labels_conv, [batch_size, -1])
+
+        # return tf.pow(tf.norm(logits_flat - labels_flat), 2)/tf.math.reduce_prod(tf.dtypes.cast(shape, tf.float32)[1:])
+        return tf.losses.absolute_difference(labels=labels_conv_flat, predictions=logits_conv_flat) + 2.0*tf.losses.absolute_difference(labels=labels_flat, predictions=logits_flat)
 
     def prediction_type(self):
         return "image"

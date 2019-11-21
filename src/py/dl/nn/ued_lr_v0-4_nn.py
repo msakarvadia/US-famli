@@ -42,7 +42,7 @@ class NN(base_nn.BaseNN):
 
             conv1_0 = self.convolution2d(images, name="conv1_0_op", filter_shape=[3,3,self.num_channels,8], strides=[1,1,1,1], padding="SAME", activation=tf.nn.leaky_relu, ps_device=ps_device, w_device=w_device)
             conv1_1 = self.convolution2d(conv1_0, name="conv1_1_op", filter_shape=[3,3,8,8], strides=[1,1,1,1], padding="SAME", activation=tf.nn.leaky_relu, ps_device=ps_device, w_device=w_device)
-        pool1_0 = self.max_pool(conv1_1, name="pool1_0_op", kernel=[1,3,3,1], strides=[1,2,2,1], ps_device=ps_device, w_device=w_device)
+            pool1_0 = self.max_pool(conv1_1, name="pool1_0_op", kernel=[1,3,3,1], strides=[1,2,2,1], ps_device=ps_device, w_device=w_device)
 
         conv2_0 = self.convolution2d(pool1_0, name="conv2_0_op", filter_shape=[3,3,8,16], strides=[1,1,1,1], padding="SAME", activation=tf.nn.leaky_relu, ps_device=ps_device, w_device=w_device)
         conv2_1 = self.convolution2d(conv2_0, name="conv2_1_op", filter_shape=[3,3,16,16], strides=[1,1,1,1], padding="SAME", activation=tf.nn.leaky_relu, ps_device=ps_device, w_device=w_device)
@@ -79,10 +79,11 @@ class NN(base_nn.BaseNN):
         
         concat7_0 = tf.concat([up_conv6_0, tf.nn.dropout( conv1_1, keep_prob)], -1)
 
-        conv7_0 = self.convolution2d(concat7_0, name="conv7_0_op", filter_shape=[3,3,16,16], strides=[1,1,1,1], padding="SAME", activation=tf.nn.leaky_relu, ps_device=ps_device, w_device=w_device)
-        conv7_1 = self.convolution2d(conv7_0, name="conv7_1_op", filter_shape=[3,3,16,16], strides=[1,1,1,1], padding="SAME", activation=tf.nn.leaky_relu, ps_device=ps_device, w_device=w_device)
+        conv7_0 = self.convolution2d(concat7_0, name="conv7_0_op", filter_shape=[7,7,16,16], strides=[1,1,1,1], padding="SAME", activation=tf.nn.leaky_relu, ps_device=ps_device, w_device=w_device)
+        conv7_1 = self.convolution2d(conv7_0, name="conv7_1_op", filter_shape=[7,7,16,16], strides=[1,1,1,1], padding="SAME", activation=tf.nn.leaky_relu, ps_device=ps_device, w_device=w_device)
 
-        final = self.convolution2d(conv7_1, name="final", filter_shape=[1,1,16,self.out_channels], strides=[1,1,1,1], padding="SAME", activation=None, ps_device=ps_device, w_device=w_device)
+        conv7_2 = self.convolution2d(conv7_1, name="conv7_2_op", filter_shape=[1,1,16,16], strides=[1,1,1,1], padding="SAME", activation=tf.nn.leaky_relu, ps_device=ps_device, w_device=w_device)
+        final = self.convolution2d(conv7_2, name="final", filter_shape=[1,1,16,self.out_channels], strides=[1,1,1,1], padding="SAME", activation=None, ps_device=ps_device, w_device=w_device)
 
         return final
 
@@ -141,11 +142,13 @@ class NN(base_nn.BaseNN):
             labels_conv = tf.layers.batch_normalization(labels, training=False)
             labels_conv = self.convolution2d(labels_conv, name="conv1_0_op", filter_shape=[3,3,self.num_channels,8], strides=[1,1,1,1], padding="SAME", activation=tf.nn.leaky_relu, ps_device="/cpu:0", w_device="/gpu:0")
             labels_conv = self.convolution2d(labels_conv, name="conv1_1_op", filter_shape=[3,3,8,8], strides=[1,1,1,1], padding="SAME", activation=tf.nn.leaky_relu, ps_device="/cpu:0", w_device="/gpu:0")
+            labels_conv = self.max_pool(labels_conv, name="pool1_0_op", kernel=[1,3,3,1], strides=[1,2,2,1], ps_device="/cpu:0", w_device="/gpu:0")
 
         with tf.variable_scope("layer1", reuse=True):
             logits_conv = tf.layers.batch_normalization(logits, training=False)
             logits_conv = self.convolution2d(logits_conv, name="conv1_0_op", filter_shape=[3,3,self.num_channels,8], strides=[1,1,1,1], padding="SAME", activation=tf.nn.leaky_relu, ps_device="/cpu:0", w_device="/gpu:0")
             logits_conv = self.convolution2d(logits_conv, name="conv1_1_op", filter_shape=[3,3,8,8], strides=[1,1,1,1], padding="SAME", activation=tf.nn.leaky_relu, ps_device="/cpu:0", w_device="/gpu:0")
+            logits_conv = self.max_pool(logits_conv, name="pool1_0_op", kernel=[1,3,3,1], strides=[1,2,2,1], ps_device="/cpu:0", w_device="/gpu:0")
 
 
         logits_flat = tf.reshape(logits, [batch_size, -1])
@@ -155,7 +158,7 @@ class NN(base_nn.BaseNN):
         labels_conv_flat = tf.reshape(labels_conv, [batch_size, -1])
 
         # return tf.pow(tf.norm(logits_flat - labels_flat), 2)/tf.math.reduce_prod(tf.dtypes.cast(shape, tf.float32)[1:])
-        return tf.losses.mean_squared_error(labels=labels_conv_flat, predictions=logits_conv_flat) + tf.losses.absolute_difference(labels=labels_flat, predictions=logits_flat)
+        return 2.0*tf.losses.absolute_difference(labels=labels_conv_flat, predictions=logits_conv_flat) + tf.losses.absolute_difference(labels=labels_flat, predictions=logits_flat)
 
     def prediction_type(self):
         return "image"
