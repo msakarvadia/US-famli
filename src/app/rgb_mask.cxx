@@ -54,27 +54,30 @@ int main (int argc, char * argv[]){
 
     input_mask = reader_mask->GetOutput();
 
-    typedef itk::FlatStructuringElement<dimension> StructuringElementType;
-    StructuringElementType::RadiusType elementRadius;
-    elementRadius.Fill(radiusStructuringElement);
+    if(radiusStructuringElement > 0){
+        typedef itk::FlatStructuringElement<dimension> StructuringElementType;
+        StructuringElementType::RadiusType elementRadius;
+        elementRadius.Fill(radiusStructuringElement);
 
-    StructuringElementType structuringElement = StructuringElementType::Box(elementRadius);
+        StructuringElementType structuringElement = StructuringElementType::Box(elementRadius);
 
-    typedef itk::BinaryDilateImageFilter<InputMaskImageType, InputMaskImageType, StructuringElementType> BinaryDilateImageFilterType;
+        typedef itk::BinaryDilateImageFilter<InputMaskImageType, InputMaskImageType, StructuringElementType> BinaryDilateImageFilterType;
 
-    BinaryDilateImageFilterType::Pointer dilateFilter = BinaryDilateImageFilterType::New();
-    dilateFilter->SetInput(input_mask);
-    dilateFilter->SetKernel(structuringElement);
-    dilateFilter->SetDilateValue(dilateMaskValue);
-    dilateFilter->Update();
+        BinaryDilateImageFilterType::Pointer dilateFilter = BinaryDilateImageFilterType::New();
+        dilateFilter->SetInput(input_mask);
+        dilateFilter->SetKernel(structuringElement);
+        dilateFilter->SetDilateValue(dilateMaskValue);
+        dilateFilter->Update();
+        input_mask = dilateFilter->GetOutput();
+    }
 
     if(useBoundingBox){
         typedef itk::LabelStatisticsImageFilter< InputMaskImageType, InputMaskImageType > LabelStatisticsImageFilterType;
         typedef LabelStatisticsImageFilterType::LabelPixelType                LabelPixelType;
         typedef LabelStatisticsImageFilterType::ValidLabelValuesContainerType ValidLabelValuesType;
         LabelStatisticsImageFilterType::Pointer labelStatisticsImageFilter = LabelStatisticsImageFilterType::New();
-        labelStatisticsImageFilter->SetLabelInput( dilateFilter->GetOutput() );
-        labelStatisticsImageFilter->SetInput( dilateFilter->GetOutput() );
+        labelStatisticsImageFilter->SetLabelInput( input_mask );
+        labelStatisticsImageFilter->SetInput( input_mask );
         labelStatisticsImageFilter->Update();
 
         for(ValidLabelValuesType::const_iterator liit=labelStatisticsImageFilter->GetValidLabelValues().begin() + 1; liit != labelStatisticsImageFilter->GetValidLabelValues().end(); ++liit){
@@ -88,7 +91,6 @@ int main (int argc, char * argv[]){
             }
         }
     }
-
 
     typedef itk::MaskImageFilter<InputRGBImageType, InputMaskImageType, InputRGBImageType> MaskImageFilterType;
     MaskImageFilterType::Pointer mask_filter = MaskImageFilterType::New();
