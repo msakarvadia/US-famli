@@ -141,31 +141,43 @@ def main(args):
 
 				##If the path exists then it will try to read it as an image
 				if(os.path.exists(fobj[key])):
-					img_read = itk.ImageFileReader.New(FileName=fobj[key])
-					img_read.Update()
-					img = img_read.GetOutput()
+					print("Reading:", fobj[key])
+					if(args.imageDimension == -1):
+						img_read = itk.ImageFileReader.New(FileName=fobj[key])
+						img_read.Update()
+						img = img_read.GetOutput()
+					else:
+						ImageType = itk.VectorImage[itk.F, args.imageDimension]
+
+						img_read = itk.ImageFileReader[ImageType].New(FileName=fobj[key])
+						img_read.Update()
+						img = img_read.GetOutput()
 					
 					img_np = itk.GetArrayViewFromImage(img).astype(float)
 					if(args.resize):
 						obj["resize"] = args.resize
 						
 						resize_shape = list(args.resize)
-						print("Num components", img.GetNumberOfComponentsPerPixel())
 						if(img.GetNumberOfComponentsPerPixel() > 1):
 							resize_shape += [img.GetNumberOfComponentsPerPixel()]
 						img_np_x =  np.zeros(resize_shape)
 
 						img_np_assign_shape = []
 						# Compute the difference between the shapes
-						delta_shape = np.array(resize_shape) - np.array(img_np.shape)
-						if(not random_delta_seed):
+						img_np_shape = img_np.shape
+						if(img_np_shape[0] == 1):
+						    # If the first component is 1 we remove it. It means that is a 2D image but was saved as 3D
+						    img_np_shape = img_np_shape[1:]
+						delta_shape = np.array(resize_shape) - np.array(img_np_shape)
+						
+						if(random_delta_seed is None):
 							# We have to use the same seed in the case we are storing multiple images, i.e., per input row
 							random_delta_seed = np.random.rand(delta_shape.size)
 						random_delta = (random_delta_seed*delta_shape).astype(int)
 
 						# We create the assign operation using the random_delta. We don't want the network to be specific to 
 						# the image position
-						for s, r in zip(img_np.shape, random_delta):
+						for s, r in zip(img_np_shape, random_delta):
 							img_np_assign_shape.append(str(r) + ":" + str(s+r))
 
 						assign_img = "img_np_x[" + ",".join(img_np_assign_shape) + "] = img_np"
@@ -302,6 +314,7 @@ if __name__ == "__main__":
 	parser.add_argument('--resize', nargs="+", type=int, default=None, help='Resize images to store as tfRecord. The resize parameter must be equal or larger than the largest image in the dataset. Do not include channels and flip axes, i.e, z y x or y x for 3D, 2D images respectively')
 	parser.add_argument('--out', type=str, default="./out", help="Output directory")
 	parser.add_argument('--split', type=float, default=0, help="Split the data for evaluation. [0-1], 0=no split")
+	parser.add_argument('--imageDimension', type=int, default=-1, help="Set image dimension, by default it will try to guess it but you can set this here. Or use it when a type is not wrapped. Ex. RGB double, it will read the image as a float vector image")
 
 	args = parser.parse_args()
 

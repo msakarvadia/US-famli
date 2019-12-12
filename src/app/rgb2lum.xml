@@ -20,6 +20,33 @@
       <longflag>img</longflag>
     </image>
 
+    <integer>
+      <name>extractComponent</name>
+      <label>Component index</label>
+      <channel>input</channel>
+      <description>Component to extract from the vector image</description>
+      <longflag>extractComponent</longflag>
+      <default>-1</default>
+    </integer>
+
+    <integer>
+      <name>outputMinimum</name>
+      <label>Output min</label>
+      <channel>input</channel>
+      <description>Minimum value of output</description>
+      <longflag>outputMinimum</longflag>
+      <default>0</default>
+    </integer>
+
+    <integer>
+      <name>outputMaximum</name>
+      <label>Output max</label>
+      <channel>input</channel>
+      <description>Maximum value of output</description>
+      <longflag>outputMaximum</longflag>
+      <default>255</default>
+    </integer>    
+
   </parameters>
 
   <parameters>

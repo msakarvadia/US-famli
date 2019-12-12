@@ -212,6 +212,7 @@ int main (int argc, char * argv[]){
 
 				cout<<"Writing file: "<<outfilename<<endl;
 				VectorImageFileWriterType::Pointer writer = VectorImageFileWriterType::New();
+				writer->UseCompressionOn();
 				writer->SetFileName(outfilename);
 				writer->SetInput(vectoroutputimage);
 				writer->Update();
@@ -248,6 +249,7 @@ int main (int argc, char * argv[]){
 
 					cout<<"Writing file: "<<outfilename<<endl;
 					ImageFileWriterType::Pointer writer = ImageFileWriterType::New();
+					writer->UseCompressionOn();
 					writer->SetFileName(outfilename);
 					writer->SetInput(outputimage);
 					writer->Update();

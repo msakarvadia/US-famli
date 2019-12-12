@@ -161,11 +161,17 @@ int main (int argc, char * argv[]){
     	reader->Update();
 
     	InputImagePointerType img = reader->GetOutput();
-    	double spacing_img[3];
-    	spacing_img[0] = 0.25;
-    	spacing_img[1] = 0.25;
-    	spacing_img[2] = 1;
-    	img->SetSpacing(spacing_img);
+    	InputImageType::SpacingType img_spacing_img = img->GetSpacing();
+    	if(imgSpacingX > 0){
+    		img_spacing_img[0] = imgSpacingX;
+    	}
+    	if(imgSpacingY > 0){
+    		img_spacing_img[1] = imgSpacingY;
+    	}
+    	if(imgSpacingZ > 0){
+    		img_spacing_img[2] = imgSpacingZ;
+    	}
+    	img->SetSpacing(img_spacing_img);
 		
 		TransformType::Pointer transform_csv = TransformType::New();
 		
@@ -228,6 +234,7 @@ int main (int argc, char * argv[]){
 
 	cout<<"Writting image: "<<outFileName<<endl;
 	ImageFileWriterType::Pointer writer = ImageFileWriterType::New();
+	writer->UseCompressionOn();
 	writer->SetFileName(outFileName);
 	writer->SetInput(output_image);
 	writer->Update();

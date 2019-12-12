@@ -75,6 +75,27 @@
       <longflag>angleRadians</longflag>
       <description>If the angles are provided in radians set this flag, otherwise a conversion from degrees to radians is done.</description>
     </boolean>
+
+    <double>
+      <name>imgSpacingX</name>      
+      <longflag>imgSpacingX</longflag>
+      <description>Pixel spacing for input images. Set only if you want to override the image spacing.</description>
+      <default>-1</default>
+    </double>
+
+    <double>
+      <name>imgSpacingY</name>      
+      <longflag>imgSpacingY</longflag>
+      <description>Pixel spacing for input images. Set only if you want to override the image spacing.</description>
+      <default>-1</default>
+    </double>
+
+    <double>
+      <name>imgSpacingZ</name>      
+      <longflag>imgSpacingZ</longflag>
+      <description>Pixel spacing for input images. Set only if you want to override the image spacing.</description>
+      <default>-1</default>
+    </double>
     
   </parameters>
 

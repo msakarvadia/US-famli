@@ -107,6 +107,7 @@ int main (int argc, char * argv[]){
     OutputImageFileWriterType::Pointer writer = OutputImageFileWriterType::New();
 
     cout<<"Writing: "<<outputImageFilename<<endl;
+    writer->UseCompressionOn();
     writer->SetFileName(outputImageFilename.c_str());
     writer->SetInput(output_image);
     writer->Update(); 

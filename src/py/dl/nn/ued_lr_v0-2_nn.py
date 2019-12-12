@@ -79,7 +79,7 @@ class NN(base_nn.BaseNN):
         
         concat7_0 = tf.concat([up_conv6_0, tf.nn.dropout( conv1_1, keep_prob)], -1)
 
-        conv7_0 = self.convolution2d(concat7_0, name="conv7_0_op", filter_shape=[7,7,16,16], strides=[1,1,1,1], padding="SAME", activation=tf.nn.leaky_relu, ps_device=ps_device, w_device=w_device)
+        conv7_0 = self.convolution2d(concat7_0, name="conv7_0_op", filter_shape=[5,5,16,16], strides=[1,1,1,1], padding="SAME", activation=tf.nn.leaky_relu, ps_device=ps_device, w_device=w_device)
         conv7_1 = self.convolution2d(conv7_0, name="conv7_1_op", filter_shape=[5,5,16,16], strides=[1,1,1,1], padding="SAME", activation=tf.nn.leaky_relu, ps_device=ps_device, w_device=w_device)
 
         conv7_2 = self.convolution2d(conv7_1, name="conv7_2_op", filter_shape=[1,1,16,16], strides=[1,1,1,1], padding="SAME", activation=tf.nn.leaky_relu, ps_device=ps_device, w_device=w_device)
@@ -156,8 +156,7 @@ class NN(base_nn.BaseNN):
 
         logits_conv_flat = tf.reshape(logits_conv, [batch_size, -1])
         labels_conv_flat = tf.reshape(labels_conv, [batch_size, -1])
-
-        # return tf.pow(tf.norm(logits_flat - labels_flat), 2)/tf.math.reduce_prod(tf.dtypes.cast(shape, tf.float32)[1:])
+        
         return tf.losses.absolute_difference(labels=labels_conv_flat, predictions=logits_conv_flat) + 2.0*tf.losses.absolute_difference(labels=labels_flat, predictions=logits_flat)
 
     def prediction_type(self):

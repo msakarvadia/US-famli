@@ -85,7 +85,7 @@ class BaseNN:
             print('DEBUG ' + string, tensor.get_shape())
     # x=[batch, in_height, in_width, in_channels]
     # filter_shape=[filter_height, filter_width, in_channels, out_channels]
-    def convolution2d(self, x, filter_shape, name='conv2d', strides=[1,1,1,1], activation=tf.nn.relu, padding="SAME", ps_device="/cpu:0", w_device="/gpu:0"):
+    def convolution2d(self, x, filter_shape, name='conv2d', strides=[1,1,1,1], activation=tf.nn.relu, use_bias=True, padding="SAME", ps_device="/cpu:0", w_device="/gpu:0"):
 
         with tf.variable_scope(name):
             with tf.device(ps_device):
@@ -94,15 +94,17 @@ class BaseNN:
                 w_conv = tf.get_variable(w_conv_name, shape=filter_shape, dtype=tf.float32, initializer=tf.truncated_normal_initializer(mean=0,stddev=0.1))
                 self.print_tensor_shape( w_conv, name + ' weight shape')
 
-                b_conv_name = 'b_' + name
-                b_conv = tf.get_variable(b_conv_name, shape=[filter_shape[-1]])
-                self.print_tensor_shape( b_conv, name + ' bias shape')
+                if(use_bias):
+                    b_conv_name = 'b_' + name
+                    b_conv = tf.get_variable(b_conv_name, shape=[filter_shape[-1]])
+                    self.print_tensor_shape( b_conv, name + ' bias shape')
 
             with tf.device(w_device):
                 conv_op = tf.nn.conv2d( x, w_conv, strides=strides, padding=padding, name='conv_op' )
                 self.print_tensor_shape( conv_op, name + ' shape')
 
-                conv_op = tf.nn.bias_add(conv_op, b_conv, name='bias_add_op')
+                if(use_bias):
+                    conv_op = tf.nn.bias_add(conv_op, b_conv, name='bias_add_op')
 
                 if(activation):
                     conv_op = activation( conv_op, name='relu_op' ) 
@@ -112,7 +114,7 @@ class BaseNN:
 
     # x=[batch, height, width, in_channels]
     # filter_shape=[height, width, output_channels, in_channels]
-    def up_convolution2d(self, x, filter_shape, output_shape, name='up_conv', strides=[1,1,1,1], activation=tf.nn.relu, padding="SAME", ps_device="/cpu:0", w_device="/gpu:0"):
+    def up_convolution2d(self, x, filter_shape, output_shape, name='up_conv', strides=[1,1,1,1], activation=tf.nn.relu, use_bias=True, padding="SAME", ps_device="/cpu:0", w_device="/gpu:0"):
 
         with tf.variable_scope(name):
             with tf.device(ps_device):
@@ -120,15 +122,17 @@ class BaseNN:
                 w_conv = tf.get_variable(w_conv_name, shape=filter_shape, dtype=tf.float32, initializer=tf.truncated_normal_initializer(mean=0,stddev=0.1))
                 self.print_tensor_shape( w_conv, name + ' weight shape')
 
-                b_conv_name = 'b_' + name
-                b_conv = tf.get_variable(b_conv_name, shape=[filter_shape[-2]])
-                self.print_tensor_shape( b_conv, name + ' bias shape')
+                if(use_bias):
+                    b_conv_name = 'b_' + name
+                    b_conv = tf.get_variable(b_conv_name, shape=[filter_shape[-2]])
+                    self.print_tensor_shape( b_conv, name + ' bias shape')
 
             with tf.device(w_device):
                 conv_op = tf.nn.conv2d_transpose( x, w_conv, output_shape=output_shape, strides=strides, padding=padding, name='up_conv_op' )
                 self.print_tensor_shape( conv_op, name + ' shape')
 
-                conv_op = tf.nn.bias_add(conv_op, b_conv, name='bias_add_op')
+                if(use_bias):
+                    conv_op = tf.nn.bias_add(conv_op, b_conv, name='bias_add_op')
 
                 if(activation):
                     conv_op = activation( conv_op, name='relu_op' ) 
@@ -138,7 +142,7 @@ class BaseNN:
 
     # x=[batch, in_depth, in_height, in_width, in_channels]
     # filter_shape=[filter_depth, filter_height, filter_width, in_channels, out_channels]
-    def convolution3d(self, x, filter_shape, name='conv3d', strides=[1,1,1,1,1], activation=tf.nn.relu, padding="SAME", ps_device="/cpu:0", w_device="/gpu:0"):
+    def convolution3d(self, x, filter_shape, name='conv3d', strides=[1,1,1,1,1], activation=tf.nn.relu, use_bias=True, padding="SAME", ps_device="/cpu:0", w_device="/gpu:0"):
 
         with tf.variable_scope(name):
             with tf.device(ps_device):
@@ -147,15 +151,17 @@ class BaseNN:
                 w_conv = tf.get_variable(w_conv_name, shape=filter_shape, dtype=tf.float32, initializer=tf.truncated_normal_initializer(mean=0,stddev=0.1))
                 self.print_tensor_shape( w_conv, name + ' weight shape')
 
-                b_conv_name = 'b_' + name
-                b_conv = tf.get_variable(b_conv_name, shape=[filter_shape[-1]])
-                self.print_tensor_shape( b_conv, name + ' bias shape')
+                if(use_bias):
+                    b_conv_name = 'b_' + name
+                    b_conv = tf.get_variable(b_conv_name, shape=[filter_shape[-1]])
+                    self.print_tensor_shape( b_conv, name + ' bias shape')
 
             with tf.device(w_device):
                 conv_op = tf.nn.conv3d( x, w_conv, strides=strides, padding=padding, name='conv_op' )
                 self.print_tensor_shape( conv_op, name + ' shape')
 
-                conv_op = tf.nn.bias_add(conv_op, b_conv, name='bias_add_op')
+                if(use_bias):
+                    conv_op = tf.nn.bias_add(conv_op, b_conv, name='bias_add_op')
 
                 if(activation):
                     conv_op = activation( conv_op, name='relu_op' ) 
@@ -165,7 +171,7 @@ class BaseNN:
 
     # x=[batch, in_depth, in_height, in_width, in_channels]
     # filter_shape=[filter_depth, filter_height, filter_width, in_channels, out_channels]
-    def up_convolution3d(self, x, filter_shape, output_shape, name='up_conv3d', strides=[1,1,1,1,1], activation=tf.nn.relu, padding="SAME", ps_device="/cpu:0", w_device="/gpu:0"):
+    def up_convolution3d(self, x, filter_shape, output_shape, name='up_conv3d', strides=[1,1,1,1,1], activation=tf.nn.relu, use_bias=True, padding="SAME", ps_device="/cpu:0", w_device="/gpu:0"):
 
         with tf.variable_scope(name):
             with tf.device(ps_device):
@@ -173,15 +179,17 @@ class BaseNN:
                 w_conv = tf.get_variable(w_conv_name, shape=filter_shape, dtype=tf.float32, initializer=tf.truncated_normal_initializer(mean=0,stddev=0.1))
                 self.print_tensor_shape( w_conv, name + ' weight shape')
 
-                b_conv_name = 'b_' + name
-                b_conv = tf.get_variable(b_conv_name, shape=[filter_shape[-2]])
-                self.print_tensor_shape( b_conv, name + ' bias shape')
+                if(use_bias):
+                    b_conv_name = 'b_' + name
+                    b_conv = tf.get_variable(b_conv_name, shape=[filter_shape[-2]])
+                    self.print_tensor_shape( b_conv, name + ' bias shape')
 
             with tf.device(w_device):
                 conv_op = tf.nn.conv3d_transpose( x, w_conv, output_shape=output_shape, strides=strides, padding=padding, name='up_conv_op' )
                 self.print_tensor_shape( conv_op, name + ' shape')
 
-                conv_op = tf.nn.bias_add(conv_op, b_conv, name='bias_add_op')
+                if(use_bias):
+                    conv_op = tf.nn.bias_add(conv_op, b_conv, name='bias_add_op')
 
                 if(activation):
                     conv_op = activation( conv_op, name='relu_op' ) 
@@ -229,7 +237,7 @@ class BaseNN:
 
                 return pool_op
 
-    def convolution(self, x, filter_shape, name='conv', stride=1, activation=tf.nn.relu, padding="SAME", ps_device="/cpu:0", w_device="/gpu:0"):
+    def convolution(self, x, filter_shape, name='conv', stride=1, activation=tf.nn.relu, use_bias=True, padding="SAME", ps_device="/cpu:0", w_device="/gpu:0"):
 
         with tf.variable_scope(name):
     # weight variable 4d tensor, first two dims are patch (kernel) size       
@@ -242,15 +250,17 @@ class BaseNN:
                 w_conv = tf.get_variable(w_conv_name, shape=filter_shape, dtype=tf.float32, initializer=tf.truncated_normal_initializer(mean=0,stddev=0.1))
                 self.print_tensor_shape( w_conv, name + ' weight shape')
 
-                b_conv_name = 'b_' + name
-                b_conv = tf.get_variable(b_conv_name, shape=[filter_shape[-1]])
-                self.print_tensor_shape( b_conv, name + ' bias shape')
+                if(use_bias):
+                    b_conv_name = 'b_' + name
+                    b_conv = tf.get_variable(b_conv_name, shape=[filter_shape[-1]])
+                    self.print_tensor_shape( b_conv, name + ' bias shape')
 
             with tf.device(w_device):
                 conv_op = tf.nn.conv1d( x, w_conv, stride=stride, padding=padding, name='conv1_op' )
                 self.print_tensor_shape( conv_op, name + ' shape')
 
-                conv_op = tf.nn.bias_add(conv_op, b_conv, name='bias_add_op')
+                if(use_bias):
+                    conv_op = tf.nn.bias_add(conv_op, b_conv, name='bias_add_op')
 
                 if(activation):
                     conv_op = activation( conv_op, name='relu_op' ) 
@@ -258,7 +268,7 @@ class BaseNN:
 
                 return conv_op
 
-    def matmul(self, x, out_channels, name='matmul', activation=tf.nn.relu, ps_device="/cpu:0", w_device="/gpu:0"):
+    def matmul(self, x, out_channels, name='matmul', activation=tf.nn.relu, use_bias=True, ps_device="/cpu:0", w_device="/gpu:0"):
 
         with tf.variable_scope(name):
 
@@ -270,12 +280,16 @@ class BaseNN:
 
             self.print_tensor_shape( w_matmul, name + ' shape')
 
-            b_matmul_name = 'b_' + name
-            b_matmul = tf.get_variable(name=b_matmul_name, shape=[out_channels])        
+            if(use_bias):
+                b_matmul_name = 'b_' + name
+                b_matmul = tf.get_variable(name=b_matmul_name, shape=[out_channels])        
 
         with tf.device(w_device):
 
-            matmul_op = tf.nn.bias_add(tf.matmul(x, w_matmul), b_matmul)
+            matmul_op = tf.matmul(x, w_matmul)
+
+            if(use_bias):
+                matmul_op = tf.nn.bias_add(matmul_op, b_matmul)
 
             if(activation):
                 matmul_op = activation(matmul_op)

@@ -35,7 +35,8 @@ parser.add_argument('--out_ext', type=str, help='Output extension for images', d
 parser.add_argument('--out_basename', type=bool, default=False, help='Keeps only the filename for the output, i.e, does not create a directory structure for the output image filename')
 parser.add_argument('--ow', type=int, help='Overwrite outputs', default=1)
 parser.add_argument('--resize', nargs="+", type=int, help='Resize images during prediction, useful when doing whole directories with images of diferent sizes. This is needed to set the value of the placeholder for tensorflow. e.x. 1500 1500. The image will be resized for the prediction but the original image size will be stored. Do not include the channels/pixel components in the resize parameters', default=None)
-parser.add_argument('--resize_prediction', type=bool, help='If the resize flag is used and resize_prediction is set to True, the output/prediction will be resized as well. Otherwise, the output of the prediction will be used as the default shape', default=False)
+parser.add_argument('--resize_prediction', type=bool, help='If the resize flag is used and resize_prediction is set to True, the output/prediction will have the same shape as the input image.', default=False)
+parser.add_argument('--save_lite_model', type=str, help='Filename to save the lite model', default=None)
 parser.add_argument('--ps_device', help='Process device', type=str, default='/cpu:0')
 parser.add_argument('--w_device', help='Worker device', type=str, default='/cpu:0')
 
@@ -85,7 +86,7 @@ if(data_description):
 
 class_prediction = False
 class_prediction_arr = []
-if("enumerate" in data_description):
+if(nn.prediction_type() == "class"):
   class_prediction = True
   class_obj = {}
   enumerate_obj = data_description[data_description["enumerate"]]["class"]
@@ -201,13 +202,14 @@ def image_read(filename):
   return img, img_np, tf_img_shape
 
 try:
+  print("Reading: ", filenames[0]["img"])
   _itkimg, _imgnp, tf_img_shape = image_read(filenames[0]["img"])
 except Exception as e:
   print("Error reading image to get shape info for prediction", filenames[0]["img"], e, file=sys.stderr)
   sys.exit()
 
-if("resize" in data_description):
-  resize_shape = data_description["resize"]
+# if("resize" in data_description):
+#   resize_shape = data_description["resize"]
 
 if(resize_shape):
   tf_img_shape = [1] + resize_shape + [tf_img_shape[-1]]
@@ -220,7 +222,7 @@ graph = tf.Graph()
 
 with graph.as_default():
 
-  x = tf.placeholder(tf.float32,shape=tf_img_shape)
+  x = tf.placeholder(tf.float32,shape=tf_img_shape,name="input_x")
   
   keep_prob = tf.placeholder(tf.float32)
 
@@ -231,6 +233,7 @@ with graph.as_default():
     y_conv = nn.inference(images=x, keep_prob=1.0, is_training=False, ps_device=ps_device, w_device=w_device)
 
   label = nn.predict(y_conv)
+  label = tf.identity(label, name="output_y")
 
   with tf.Session() as sess:
 
@@ -267,7 +270,7 @@ with graph.as_default():
 
         label_map = sess.run([label], feed_dict={x: img_np_x.astype(np.float32)})
 
-        if(class_prediction):
+        if(nn.prediction_type() == "class"):
           print("Prediction:", class_obj[np.argmax(label_map[0])])
           class_prediction_arr.append({
             "img": img_obj["img"],
@@ -312,8 +315,10 @@ with graph.as_default():
             out_img.SetNumberOfComponentsPerPixel(PixelDimension)
             
           size = itk.Size[Dimension]()
+          size.Fill(1)
           label_map_shape = list(label_map.shape[0:-1])
           label_map_shape.reverse()
+
           for i, s in enumerate(label_map_shape):
             size[i] = s
 
@@ -337,6 +342,7 @@ with graph.as_default():
 
           print("Writing:", img_obj["out"])
           writer = itk.ImageFileWriter.New(FileName=img_obj["out"], Input=out_img)
+          writer.UseCompressionOn()
           writer.Update()
 
         elif(nn.prediction_type() == "scalar"):
@@ -346,6 +352,19 @@ with graph.as_default():
             })
         else:
           print(label_map[0])
+
+
+        if(args.save_lite_model):
+          inputs = graph.get_tensor_by_name('input_x:0')
+          outputs = graph.get_tensor_by_name('output_y:0')
+
+          converter = tf.lite.TFLiteConverter.from_session(sess, [inputs], [outputs])
+          tflite_model = converter.convert()
+          with open(args.save_lite_model, "wb") as lite_save: 
+            lite_save.write(tflite_model)
+
+          args.save_lite_model = None
+
 
       except Exception as e:
         print("Error predicting image:", e, file=sys.stderr)

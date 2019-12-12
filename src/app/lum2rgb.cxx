@@ -44,6 +44,7 @@ int main (int argc, char * argv[]){
     InputLabelImageFileWriterType::Pointer writer = InputLabelImageFileWriterType::New();
 
     cout<<"Writing: "<<outputImageFilename<<endl;
+    writer->UseCompressionOn();
     writer->SetFileName(outputImageFilename.c_str());
     writer->SetInput(castfilter->GetOutput());
     writer->Update();

@@ -6,6 +6,8 @@
 #include <itkImageFileWriter.h>
 #include <itkRGBToLuminanceImageFilter.h>
 #include <itkCastImageFilter.h>
+#include <itkVectorIndexSelectionCastImageFilter.h>
+#include <itkRescaleIntensityImageFilter.h>
 
 using namespace std;
 
@@ -27,42 +29,62 @@ int main (int argc, char * argv[]){
     typedef InputImageType::Pointer InputImagePointerType;
 
     typedef itk::ImageRegionIterator< InputImageType > ImageRegionIteratorType;
-    
 
-    typedef itk::Image< itk::RGBPixel<double>, dimension> InputRGBImageType;
+    typedef itk::Image< itk::RGBPixel<InputPixelType>, dimension> InputRGBImageType;
     typedef itk::ImageFileReader< InputRGBImageType > InputImageRGBFileReaderType;
+
+    typedef itk::Image< double, dimension> OutputComponentImageType;
+
+    typedef unsigned short OutputPixelType;
+    typedef itk::Image< OutputPixelType, dimension> OutputImageType;
+
+    typedef itk::ImageFileWriter< OutputImageType > OutputImageFileWriterType;
     
     InputImageRGBFileReaderType::Pointer reader = InputImageRGBFileReaderType::New();
     reader->SetFileName(inputImageFilename.c_str());
     reader->Update();
 
-    typedef itk::RGBToLuminanceImageFilter< InputRGBImageType, InputImageType > RGBToLuminanceImageFilterType;
+    InputImageType::Pointer outimg;
 
-    RGBToLuminanceImageFilterType::Pointer lumfilter = RGBToLuminanceImageFilterType::New();
-    lumfilter->SetInput(reader->GetOutput());
-    lumfilter->Update();
-    InputImagePointerType outputimg = lumfilter->GetOutput();
+    if(extractComponent == -1){
+        typedef itk::RGBToLuminanceImageFilter< InputRGBImageType, InputImageType > RGBToLuminanceImageFilterType;
 
+        RGBToLuminanceImageFilterType::Pointer lumfilter = RGBToLuminanceImageFilterType::New();
+        lumfilter->SetInput(reader->GetOutput());
+        lumfilter->Update();
+        outimg = lumfilter->GetOutput();
+        
+    }else{
 
-    typedef unsigned char OutputPixelType;
-    typedef itk::Image< OutputPixelType, dimension> OutputImageType;
+        typedef itk::VectorIndexSelectionCastImageFilter<InputRGBImageType, InputImageType> VectorIndexSelectionCastImageFilterType;
+        VectorIndexSelectionCastImageFilterType::Pointer vector_selection = VectorIndexSelectionCastImageFilterType::New();
+        vector_selection->SetIndex(extractComponent);
+        vector_selection->SetInput(reader->GetOutput());
+        vector_selection->Update();
+        outimg = vector_selection->GetOutput();
+    }
 
+    typedef itk::RescaleIntensityImageFilter<InputImageType, InputImageType> RescaleIntensityImageFilterType;
+    RescaleIntensityImageFilterType::Pointer rescale = RescaleIntensityImageFilterType::New();
+    rescale->SetInput(outimg);
+    rescale->SetOutputMinimum(outputMinimum);
+    rescale->SetOutputMaximum(outputMaximum);
+    rescale->Update();
 
     typedef itk::CastImageFilter< InputImageType, OutputImageType > CastImageFilterType;
 
     CastImageFilterType::Pointer cast = CastImageFilterType::New();
 
-    cast->SetInput(outputimg);
+    cast->SetInput(rescale->GetOutput());
     cast->Update();
 
-
-    typedef itk::ImageFileWriter< OutputImageType > OutputImageFileWriterType;
     OutputImageFileWriterType::Pointer writer = OutputImageFileWriterType::New();
 
     cout<<"Writing: "<<outputImageFilename<<endl;
+    writer->UseCompressionOn();
     writer->SetFileName(outputImageFilename.c_str());
     writer->SetInput(cast->GetOutput());
-    writer->Update();
+    writer->Update();   
 
 
     return EXIT_SUCCESS;
