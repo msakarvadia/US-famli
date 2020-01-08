@@ -36,7 +36,7 @@ parser.add_argument('--out_basename', type=bool, default=False, help='Keeps only
 parser.add_argument('--ow', type=int, help='Overwrite outputs', default=1)
 parser.add_argument('--resize', nargs="+", type=int, help='Resize images during prediction, useful when doing whole directories with images of diferent sizes. This is needed to set the value of the placeholder for tensorflow. e.x. 1500 1500. The image will be resized for the prediction but the original image size will be stored. Do not include the channels/pixel components in the resize parameters', default=None)
 parser.add_argument('--resize_prediction', type=bool, help='If the resize flag is used and resize_prediction is set to True, the output/prediction will have the same shape as the input image.', default=False)
-parser.add_argument('--save_lite_model', type=str, help='Filename to save the lite model', default=None)
+parser.add_argument('--save_model_prediction', type=str, help='Directory to save the model again. Need the placeholder for the input.', default=None)
 parser.add_argument('--ps_device', help='Process device', type=str, default='/cpu:0')
 parser.add_argument('--w_device', help='Worker device', type=str, default='/cpu:0')
 
@@ -235,6 +235,10 @@ with graph.as_default():
   label = nn.predict(y_conv)
   label = tf.identity(label, name="output_y")
 
+  builder = None
+  if(args.save_model_prediction):
+    builder = tf.compat.v1.saved_model.Builder(args.save_model_prediction)
+
   with tf.Session() as sess:
 
     sess.run([tf.global_variables_initializer(), tf.local_variables_initializer()])
@@ -354,16 +358,25 @@ with graph.as_default():
           print(label_map[0])
 
 
-        if(args.save_lite_model):
+        if(builder):
           inputs = graph.get_tensor_by_name('input_x:0')
           outputs = graph.get_tensor_by_name('output_y:0')
 
-          converter = tf.lite.TFLiteConverter.from_session(sess, [inputs], [outputs])
-          tflite_model = converter.convert()
-          with open(args.save_lite_model, "wb") as lite_save: 
-            lite_save.write(tflite_model)
+          model_input = tf.saved_model.utils.build_tensor_info(inputs)
+          model_output = tf.saved_model.utils.build_tensor_info(outputs)
 
-          args.save_lite_model = None
+          signature_definition = tf.saved_model.signature_def_utils.build_signature_def(
+            inputs={'inputs': model_input},
+            outputs={'outputs': model_output},
+            method_name= tf.saved_model.signature_constants.PREDICT_METHOD_NAME)
+
+          builder.add_meta_graph_and_variables(
+            sess, [tf.saved_model.SERVING],
+            signature_def_map={tf.saved_model.DEFAULT_SERVING_SIGNATURE_DEF_KEY: signature_definition},
+            clear_devices=True)
+
+          builder.save()
+          builder = None
 
 
       except Exception as e:
