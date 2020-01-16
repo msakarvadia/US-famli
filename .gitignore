@@ -104,3 +104,4 @@ venv.bak/
 .mypy_cache/
 ._*
 .DS_Store
+node_modules
