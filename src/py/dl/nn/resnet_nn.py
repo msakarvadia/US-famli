@@ -91,33 +91,33 @@ class NN(base_nn.BaseNN):
             x = self.max_pool(x, name="pool0_0_op", kernel=[1,3,3,1], strides=[1,2,2,1], ps_device=ps_device, w_device=w_device)
 
         with tf.variable_scope("block1"):
-            x = self.conv_block(x, 64, [64,64,128], block='a', is_training=is_training, ps_device=ps_device, w_device=w_device)
-            x = self.identity_block(x, 128, [64,64,128], block='b', is_training=is_training, ps_device=ps_device, w_device=w_device)
-            x = self.identity_block(x, 128, [64,64,128], block='c', is_training=is_training, ps_device=ps_device, w_device=w_device)
+            x = self.conv_block(x, 64, [64,64,64], block='a', is_training=is_training, ps_device=ps_device, w_device=w_device)
+            x = self.identity_block(x, 64, [64,64,64], block='b', is_training=is_training, ps_device=ps_device, w_device=w_device)
+            x = self.identity_block(x, 64, [64,64,64], block='c', is_training=is_training, ps_device=ps_device, w_device=w_device)
             x = tf.nn.dropout(x, keep_prob)
 
         with tf.variable_scope("block2"):
-            x = self.conv_block(x, 128, [128,128,256], block='a', is_training=is_training, ps_device=ps_device, w_device=w_device)
-            x = self.identity_block(x, 256, [128,128,256], block='b', is_training=is_training, ps_device=ps_device, w_device=w_device)
-            x = self.identity_block(x, 256, [128,128,256], block='c', is_training=is_training, ps_device=ps_device, w_device=w_device)
-            x = self.identity_block(x, 256, [128,128,256], block='d', is_training=is_training, ps_device=ps_device, w_device=w_device)
+            x = self.conv_block(x, 64, [128,128,128], block='a', is_training=is_training, ps_device=ps_device, w_device=w_device)
+            x = self.identity_block(x, 128, [128,128,128], block='b', is_training=is_training, ps_device=ps_device, w_device=w_device)
+            x = self.identity_block(x, 128, [128,128,128], block='c', is_training=is_training, ps_device=ps_device, w_device=w_device)
+            x = self.identity_block(x, 128, [128,128,128], block='d', is_training=is_training, ps_device=ps_device, w_device=w_device)
             x = tf.nn.dropout(x, keep_prob)
 
         with tf.variable_scope("block3"):
-            x = self.conv_block(x, 256, [256,256,512], block='a', is_training=is_training, ps_device=ps_device, w_device=w_device)
-            x = self.identity_block(x, 512, [256,256,512], block='b', is_training=is_training, ps_device=ps_device, w_device=w_device)
-            x = self.identity_block(x, 512, [256,256,512], block='c', is_training=is_training, ps_device=ps_device, w_device=w_device)
-            x = self.identity_block(x, 512, [256,256,512], block='d', is_training=is_training, ps_device=ps_device, w_device=w_device)
-            x = self.identity_block(x, 512, [256,256,512], block='e', is_training=is_training, ps_device=ps_device, w_device=w_device)
+            x = self.conv_block(x, 128, [256,256,256], block='a', is_training=is_training, ps_device=ps_device, w_device=w_device)
+            x = self.identity_block(x, 256, [256,256,256], block='b', is_training=is_training, ps_device=ps_device, w_device=w_device)
+            x = self.identity_block(x, 256, [256,256,256], block='c', is_training=is_training, ps_device=ps_device, w_device=w_device)
+            x = self.identity_block(x, 256, [256,256,256], block='d', is_training=is_training, ps_device=ps_device, w_device=w_device)
+            x = self.identity_block(x, 256, [256,256,256], block='e', is_training=is_training, ps_device=ps_device, w_device=w_device)
             x = tf.nn.dropout(x, keep_prob)
 
         with tf.variable_scope("block4"):
-            x = self.conv_block(x, 512, [512,512,1024], block='a', is_training=is_training, ps_device=ps_device, w_device=w_device)
-            x = self.identity_block(x, 1024, [512,512,1024], block='b', is_training=is_training, ps_device=ps_device, w_device=w_device)
-            x = self.identity_block(x, 1024, [512,512,1024], block='c', is_training=is_training, ps_device=ps_device, w_device=w_device)
-            x = self.identity_block(x, 1024, [512,512,1024], block='d', is_training=is_training, ps_device=ps_device, w_device=w_device)
-            x = self.identity_block(x, 1024, [512,512,1024], block='e', is_training=is_training, ps_device=ps_device, w_device=w_device)
-            x = self.identity_block(x, 1024, [512,512,1024], block='f', is_training=is_training, ps_device=ps_device, w_device=w_device)
+            x = self.conv_block(x, 256, [512,512,512], block='a', is_training=is_training, ps_device=ps_device, w_device=w_device)
+            x = self.identity_block(x, 512, [512,512,512], block='b', is_training=is_training, ps_device=ps_device, w_device=w_device)
+            x = self.identity_block(x, 512, [512,512,512], block='c', is_training=is_training, ps_device=ps_device, w_device=w_device)
+            x = self.identity_block(x, 512, [512,512,512], block='d', is_training=is_training, ps_device=ps_device, w_device=w_device)
+            x = self.identity_block(x, 512, [512,512,512], block='e', is_training=is_training, ps_device=ps_device, w_device=w_device)
+            x = self.identity_block(x, 512, [512,512,512], block='f', is_training=is_training, ps_device=ps_device, w_device=w_device)
             x = tf.nn.dropout(x, keep_prob)
         
         with tf.variable_scope("fc"):
@@ -125,7 +125,7 @@ class NN(base_nn.BaseNN):
             kernel_size[0] = 1
             kernel_size[-1] = 1
             x = self.avg_pool(x, name="avg_pool_op", kernel=kernel_size, strides=kernel_size, ps_device=ps_device, w_device=w_device)
-            x = tf.reshape(x, (batch_size, 1024))
+            x = tf.reshape(x, (batch_size, 512))
 
             x = self.matmul(x, self.num_classes, name='final_op', activation=None, ps_device=ps_device, w_device=w_device)
 
