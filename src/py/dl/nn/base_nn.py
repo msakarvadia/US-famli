@@ -85,13 +85,13 @@ class BaseNN:
             print('DEBUG ' + string, tensor.get_shape())
     # x=[batch, in_height, in_width, in_channels]
     # filter_shape=[filter_height, filter_width, in_channels, out_channels]
-    def convolution2d(self, x, filter_shape, name='conv2d', strides=[1,1,1,1], activation=tf.nn.relu, use_bias=True, padding="SAME", ps_device="/cpu:0", w_device="/gpu:0"):
+    def convolution2d(self, x, filter_shape, name='conv2d', strides=[1,1,1,1], activation=tf.nn.relu, use_bias=True, initializer=tf.truncated_normal_initializer(mean=0,stddev=0.1), padding="SAME", ps_device="/cpu:0", w_device="/gpu:0"):
 
         with tf.variable_scope(name):
             with tf.device(ps_device):
                 w_conv_name = 'w_' + name
                 # filter_shape=[in_time,in_channels,out_channels]
-                w_conv = tf.get_variable(w_conv_name, shape=filter_shape, dtype=tf.float32, initializer=tf.truncated_normal_initializer(mean=0,stddev=0.1))
+                w_conv = tf.get_variable(w_conv_name, shape=filter_shape, dtype=tf.float32, initializer=initializer)
                 self.print_tensor_shape( w_conv, name + ' weight shape')
 
                 if(use_bias):
@@ -114,12 +114,12 @@ class BaseNN:
 
     # x=[batch, height, width, in_channels]
     # filter_shape=[height, width, output_channels, in_channels]
-    def up_convolution2d(self, x, filter_shape, output_shape, name='up_conv', strides=[1,1,1,1], activation=tf.nn.relu, use_bias=True, padding="SAME", ps_device="/cpu:0", w_device="/gpu:0"):
+    def up_convolution2d(self, x, filter_shape, output_shape, name='up_conv', strides=[1,1,1,1], activation=tf.nn.relu, use_bias=True, initializer=tf.truncated_normal_initializer(mean=0,stddev=0.1), padding="SAME", ps_device="/cpu:0", w_device="/gpu:0"):
 
         with tf.variable_scope(name):
             with tf.device(ps_device):
                 w_conv_name = 'w_' + name
-                w_conv = tf.get_variable(w_conv_name, shape=filter_shape, dtype=tf.float32, initializer=tf.truncated_normal_initializer(mean=0,stddev=0.1))
+                w_conv = tf.get_variable(w_conv_name, shape=filter_shape, dtype=tf.float32, initializer=initializer)
                 self.print_tensor_shape( w_conv, name + ' weight shape')
 
                 if(use_bias):
@@ -142,13 +142,13 @@ class BaseNN:
 
     # x=[batch, in_depth, in_height, in_width, in_channels]
     # filter_shape=[filter_depth, filter_height, filter_width, in_channels, out_channels]
-    def convolution3d(self, x, filter_shape, name='conv3d', strides=[1,1,1,1,1], activation=tf.nn.relu, use_bias=True, padding="SAME", ps_device="/cpu:0", w_device="/gpu:0"):
+    def convolution3d(self, x, filter_shape, name='conv3d', strides=[1,1,1,1,1], activation=tf.nn.relu, use_bias=True, initializer=tf.truncated_normal_initializer(mean=0,stddev=0.1), padding="SAME", ps_device="/cpu:0", w_device="/gpu:0"):
 
         with tf.variable_scope(name):
             with tf.device(ps_device):
                 w_conv_name = 'w_' + name
                 # filter_shape=[in_time,in_channels,out_channels]
-                w_conv = tf.get_variable(w_conv_name, shape=filter_shape, dtype=tf.float32, initializer=tf.truncated_normal_initializer(mean=0,stddev=0.1))
+                w_conv = tf.get_variable(w_conv_name, shape=filter_shape, dtype=tf.float32, initializer=initializer)
                 self.print_tensor_shape( w_conv, name + ' weight shape')
 
                 if(use_bias):
@@ -171,12 +171,12 @@ class BaseNN:
 
     # x=[batch, in_depth, in_height, in_width, in_channels]
     # filter_shape=[filter_depth, filter_height, filter_width, in_channels, out_channels]
-    def up_convolution3d(self, x, filter_shape, output_shape, name='up_conv3d', strides=[1,1,1,1,1], activation=tf.nn.relu, use_bias=True, padding="SAME", ps_device="/cpu:0", w_device="/gpu:0"):
+    def up_convolution3d(self, x, filter_shape, output_shape, name='up_conv3d', strides=[1,1,1,1,1], activation=tf.nn.relu, use_bias=True, initializer=tf.truncated_normal_initializer(mean=0,stddev=0.1), padding="SAME", ps_device="/cpu:0", w_device="/gpu:0"):
 
         with tf.variable_scope(name):
             with tf.device(ps_device):
                 w_conv_name = 'w_' + name
-                w_conv = tf.get_variable(w_conv_name, shape=filter_shape, dtype=tf.float32, initializer=tf.truncated_normal_initializer(mean=0,stddev=0.1))
+                w_conv = tf.get_variable(w_conv_name, shape=filter_shape, dtype=tf.float32, initializer=initializer)
                 self.print_tensor_shape( w_conv, name + ' weight shape')
 
                 if(use_bias):
@@ -237,7 +237,7 @@ class BaseNN:
 
                 return pool_op
 
-    def convolution(self, x, filter_shape, name='conv', stride=1, activation=tf.nn.relu, use_bias=True, padding="SAME", ps_device="/cpu:0", w_device="/gpu:0"):
+    def convolution(self, x, filter_shape, name='conv', stride=1, activation=tf.nn.relu, use_bias=True, padding="SAME", initializer=tf.truncated_normal_initializer(mean=0,stddev=0.1), ps_device="/cpu:0", w_device="/gpu:0"):
 
         with tf.variable_scope(name):
     # weight variable 4d tensor, first two dims are patch (kernel) size       
@@ -247,7 +247,7 @@ class BaseNN:
                 w_conv_name = 'w_' + name
                 # in_time -> stride in time
                 # filter_shape=[in_time,in_channels,out_channels]
-                w_conv = tf.get_variable(w_conv_name, shape=filter_shape, dtype=tf.float32, initializer=tf.truncated_normal_initializer(mean=0,stddev=0.1))
+                w_conv = tf.get_variable(w_conv_name, shape=filter_shape, dtype=tf.float32, initializer=initializer)
                 self.print_tensor_shape( w_conv, name + ' weight shape')
 
                 if(use_bias):
@@ -268,7 +268,7 @@ class BaseNN:
 
                 return conv_op
 
-    def matmul(self, x, out_channels, name='matmul', activation=tf.nn.relu, use_bias=True, ps_device="/cpu:0", w_device="/gpu:0"):
+    def matmul(self, x, out_channels, name='matmul', activation=tf.nn.relu, use_bias=True, initializer=tf.truncated_normal_initializer(mean=0,stddev=0.1), ps_device="/cpu:0", w_device="/gpu:0"):
 
         with tf.variable_scope(name):
 
@@ -276,7 +276,7 @@ class BaseNN:
 
         with tf.device(ps_device):
             w_matmul_name = 'w_' + name
-            w_matmul = tf.get_variable(w_matmul_name, shape=[in_channels,out_channels], dtype=tf.float32, initializer=tf.truncated_normal_initializer(mean=0,stddev=0.1))
+            w_matmul = tf.get_variable(w_matmul_name, shape=[in_channels,out_channels], dtype=tf.float32, initializer=initializer)
 
             self.print_tensor_shape( w_matmul, name + ' shape')
 
@@ -295,6 +295,47 @@ class BaseNN:
                 matmul_op = activation(matmul_op)
 
             return matmul_op
+
+    def conv_block(self, x0, in_filters, out_filters, block='a', is_training=False, ps_device="/cpu:0", w_device="/gpu:0"):
+        
+        x = self.convolution2d(x0, name= block + "_conv1_op", filter_shape=[1,1,in_filters,out_filters[0]], strides=[1,1,1,1], padding="SAME", use_bias=False, activation=None, ps_device=ps_device, w_device=w_device)
+        x = tf.layers.batch_normalization(x, training=is_training)
+        x = tf.nn.relu(x)
+
+        x = self.convolution2d(x, name=block + "_conv2_op", filter_shape=[3,3,out_filters[0],out_filters[1]], strides=[1,2,2,1], padding="SAME", use_bias=False, activation=None, ps_device=ps_device, w_device=w_device)
+        x = tf.layers.batch_normalization(x, training=is_training)
+        x = tf.nn.relu(x)
+
+        x = self.convolution2d(x, name=block + "_conv3_op", filter_shape=[1,1,out_filters[1],out_filters[2]], strides=[1,1,1,1], padding="SAME", use_bias=False, activation=None, ps_device=ps_device, w_device=w_device)
+        x = tf.layers.batch_normalization(x, training=is_training)
+        x = tf.nn.relu(x)     
+
+        shortcut = self.convolution2d(x0, name=block + "_conv4_op", filter_shape=[1,1,in_filters,out_filters[2]], strides=[1,2,2,1], padding="SAME", use_bias=False, activation=None, ps_device=ps_device, w_device=w_device)    
+        shortcut = tf.layers.batch_normalization(shortcut, training=is_training)
+
+        x = tf.math.add(x, shortcut)
+        x = tf.nn.relu(x)
+
+        return x
+
+    def identity_block(self, x0, in_filters, out_filters, block='a', is_training=False, ps_device="/cpu:0", w_device="/gpu:0"):
+
+        x = self.convolution2d(x0, name=block + "_conv1_op", filter_shape=[1,1,in_filters,out_filters[0]], strides=[1,1,1,1], padding="SAME", use_bias=False, activation=None, ps_device=ps_device, w_device=w_device)
+        x = tf.layers.batch_normalization(x, training=is_training)
+        x = tf.nn.relu(x)   
+
+        x = self.convolution2d(x, name=block + "_conv2_op", filter_shape=[3,3,out_filters[0],out_filters[1]], strides=[1,1,1,1], padding="SAME", use_bias=False, activation=None, ps_device=ps_device, w_device=w_device)
+        x = tf.layers.batch_normalization(x, training=is_training)
+        x = tf.nn.relu(x)  
+
+        x = self.convolution2d(x, name=block + "_conv3_op", filter_shape=[1,1,out_filters[1],out_filters[2]], strides=[1,1,1,1], padding="SAME", use_bias=False, activation=None, ps_device=ps_device, w_device=w_device)
+        x = tf.layers.batch_normalization(x, training=is_training)
+        x = tf.nn.relu(x) 
+        
+        x = tf.math.add(x, x0)
+        x = tf.nn.relu(x)
+
+        return x
         
     def inference(self, data_tuple=None, images=None, keep_prob=1, is_training=False, ps_device="/cpu:0", w_device="/gpu:0"):
         raise NotImplementedError
@@ -309,3 +350,5 @@ class BaseNN:
     def prediction_type(self):
         print("Implement in your own class, the return type must be one of 'image', 'segmentation', 'class', 'scalar'", file=sys.stderr)
         raise NotImplementedError
+    def restore_variables(self):
+        return None

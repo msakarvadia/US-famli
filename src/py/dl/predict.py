@@ -32,11 +32,12 @@ parser.add_argument('--data_description', type=str, help='JSON file created by t
 
 parser.add_argument('--out', type=str, help='Output image, csv, or directory. If --dir flag is used the output image name will be the <Directory set in out flag>/<image filename in directory dir>', default="out")
 parser.add_argument('--out_ext', type=str, help='Output extension for images', default='.nrrd')
+parser.add_argument('--out_ctype', type=str, help='Output component type', default='short')
 parser.add_argument('--out_basename', type=bool, default=False, help='Keeps only the filename for the output, i.e, does not create a directory structure for the output image filename')
 parser.add_argument('--ow', type=int, help='Overwrite outputs', default=1)
 parser.add_argument('--resize', nargs="+", type=int, help='Resize images during prediction, useful when doing whole directories with images of diferent sizes. This is needed to set the value of the placeholder for tensorflow. e.x. 1500 1500. The image will be resized for the prediction but the original image size will be stored. Do not include the channels/pixel components in the resize parameters', default=None)
 parser.add_argument('--resize_prediction', type=bool, help='If the resize flag is used and resize_prediction is set to True, the output/prediction will have the same shape as the input image.', default=False)
-parser.add_argument('--save_model_prediction', type=str, help='Directory to save the model again. Need the placeholder for the input.', default=None)
+parser.add_argument('--save_model_prediction', type=str, help='Directory to save the model in saved_model format, a.k.a, export the model', default=None)
 parser.add_argument('--ps_device', help='Process device', type=str, default='/cpu:0')
 parser.add_argument('--w_device', help='Worker device', type=str, default='/cpu:0')
 
@@ -45,6 +46,7 @@ args = parser.parse_args()
 json_model_name = args.json
 out_name = args.out
 out_ext = args.out_ext
+out_ctype = args.out_ctype
 resize_shape = args.resize
 resize_prediction = args.resize_prediction
 ps_device = args.ps_device
@@ -180,7 +182,9 @@ if len(filenames) == 0:
   sys.exit()
 
 def image_read(filename):
-  img_read = itk.ImageFileReader.New(FileName=filename)
+
+  ImageType = itk.VectorImage[itk.F, 2]
+  img_read = itk.ImageFileReader[ImageType].New(FileName=filename)
   img_read.Update()
   img = img_read.GetOutput()
   
@@ -188,7 +192,7 @@ def image_read(filename):
 
   # Put the shape of the image in the json object if it does not exists. This is done for global information
   tf_img_shape = list(img_np.shape)
-  if(tf_img_shape[0] == 1):
+  if(tf_img_shape[0] == 1 and img.GetImageDimension() > 2):
     # If the first component is 1 we remove it. It means that is a 2D image but was saved as 3D
     tf_img_shape = tf_img_shape[1:]
 
@@ -225,12 +229,8 @@ with graph.as_default():
   x = tf.placeholder(tf.float32,shape=tf_img_shape,name="input_x")
   
   keep_prob = tf.placeholder(tf.float32)
-
-  if is_gan:
-    with tf.variable_scope("generator"):
-      y_conv = nn.inference(images=x, keep_prob=1.0, is_training=False, ps_device=ps_device, w_device=w_device)
-  else:
-    y_conv = nn.inference(images=x, keep_prob=1.0, is_training=False, ps_device=ps_device, w_device=w_device)
+  
+  y_conv = nn.inference(images=x, keep_prob=1.0, is_training=False, ps_device=ps_device, w_device=w_device)
 
   label = nn.predict(y_conv)
   label = tf.identity(label, name="output_y")
@@ -303,9 +303,9 @@ with graph.as_default():
               label_map = np.absolute(label_map)
               label_map = np.around(label_map).astype(np.uint16)
             else:
-              PixelType = itk.US
-              label_map = np.absolute(label_map)
-              label_map = np.around(label_map).astype(np.uint16)
+              PixelType = itk.ctype(out_ctype)
+              # label_map = np.absolute(label_map)
+              # label_map = np.around(label_map).astype(np.uint16)
 
             OutputImageType = itk.Image[PixelType, Dimension]
             out_img = OutputImageType.New()
