@@ -23,9 +23,11 @@ parser.add_argument('--csv_column', type=str, default='image', help='CSV column 
 parser.add_argument('--csv_root_path', type=str, default='', help='Replaces a root path directory to empty, this is use to recreate a directory structure in the output directory, otherwise, the output name will be the name in the csv (only if csv flag is used)')
 
 parser.add_argument('--model', help='Directory of saved model format')
+parser.add_argument('--class_prediction', help='If the model does class prediction', default=False)
 
 parser.add_argument('--out', type=str, help='Output image, csv, or directory. If --dir flag is used the output image name will be the <Directory set in out flag>/<image filename in directory dir>', default="out")
 parser.add_argument('--out_ext', type=str, help='Output extension for images', default='.nrrd')
+parser.add_argument('--out_basename', type=bool, default=False, help='Keeps only the filename for the output, i.e, does not create a directory structure for the output image filename')
 parser.add_argument('--ow', type=bool, help='Overwrite outputs', default=True)
 
 args = parser.parse_args()
@@ -33,6 +35,7 @@ args = parser.parse_args()
 saved_model_path = args.model
 out_name = args.out
 out_ext = args.out_ext
+class_prediction = args.class_prediction
 
 filenames = []
 
@@ -104,74 +107,95 @@ def image_read(filename):
 
   return img, img_np, tf_img_shape
 
-with tf.Session() as sess:
 
-  loaded = tf.saved_model.load(sess=sess, tags=[tf.saved_model.SERVING], export_dir=saved_model_path)
+def image_save(img_obj, prediction):
+  PixelDimension = prediction.shape[-1]
+  Dimension = 2
+  
+  if(PixelDimension < 7):
+    if(PixelDimension >= 3 and os.path.splitext(img_obj["out"])[1] not in ['.jpg', '.png']):
+      ComponentType = itk.ctype('float')
+      PixelType = itk.Vector[ComponentType, PixelDimension]
+    elif(PixelDimension == 3):
+      PixelType = itk.RGBPixel.UC
+      prediction = np.absolute(prediction)
+      prediction = np.around(prediction).astype(np.uint16)
+    else:
+      PixelType = itk.ctype('float')
+
+    OutputImageType = itk.Image[PixelType, Dimension]
+    out_img = OutputImageType.New()
+
+  else:
+
+    ComponentType = itk.ctype('float')
+    OutputImageType = itk.VectorImage[ComponentType, Dimension]
+
+    out_img = OutputImageType.New()
+    out_img.SetNumberOfComponentsPerPixel(PixelDimension)
+    
+  size = itk.Size[Dimension]()
+  size.Fill(1)
+  prediction_shape = list(prediction.shape[0:-1])
+  prediction_shape.reverse()
+
+  for i, s in enumerate(prediction_shape):
+    size[i] = s
+
+  index = itk.Index[Dimension]()
+  index.Fill(0)
+
+  RegionType = itk.ImageRegion[Dimension]
+  region = RegionType()
+  region.SetIndex(index)
+  region.SetSize(size)
+  
+  # out_img.SetRegions(img.GetLargestPossibleRegion())
+  out_img.SetRegions(region)
+  out_img.SetDirection(img.GetDirection())
+  out_img.SetOrigin(img.GetOrigin())
+  out_img.SetSpacing(img.GetSpacing())
+  out_img.Allocate()
+
+  out_img_np = itk.GetArrayViewFromImage(out_img)
+  out_img_np.setfield(np.reshape(prediction, out_img_np.shape), out_img_np.dtype)
+
+  print("Writing:", img_obj["out"])
+  writer = itk.ImageFileWriter.New(FileName=img_obj["out"], Input=out_img)
+  writer.UseCompressionOn()
+  writer.Update()
+
+
+if(int(tf.__version__.split('.')[0]) > 1):
+  model = tf.keras.models.load_model(saved_model_path)
+  model.summary()
+  for layer in model.layers:
+    if("batch_normalization" in layer.name):
+      layer.training = True
 
   for img_obj in filenames:
-    img, img_np, tf_img_shape = image_read(img_obj["img"])
+      img, img_np, tf_img_shape = image_read(img_obj["img"])
+      print(np.linalg.norm(img_np))
+      prediction = tf.sigmoid(model.predict(np.reshape(img_np, (1,4096))))
 
-    prediction = sess.run(
-        'output_y:0',
-        feed_dict={
-            'input_x:0': np.reshape(img_np, (1,) + img_np.shape)
-        }
-    )
+      prediction = np.array(prediction[0])
+      image_save(img_obj, prediction)
 
-    prediction = np.array(prediction[0])
-    PixelDimension = prediction.shape[-1]
-    Dimension = 2
-    
-    if(PixelDimension < 7):
-      if(PixelDimension >= 3 and os.path.splitext(img_obj["out"])[1] not in ['.jpg', '.png']):
-        ComponentType = itk.ctype('float')
-        PixelType = itk.Vector[ComponentType, PixelDimension]
-      elif(PixelDimension == 3):
-        PixelType = itk.RGBPixel.UC
-        prediction = np.absolute(prediction)
-        prediction = np.around(prediction).astype(np.uint16)
-      else:
-        PixelType = itk.ctype(out_ctype)
+else:
+  with tf.Session() as sess:
 
-      OutputImageType = itk.Image[PixelType, Dimension]
-      out_img = OutputImageType.New()
+    loaded = tf.saved_model.load(sess=sess, tags=[tf.saved_model.SERVING], export_dir=saved_model_path)
 
-    else:
+    for img_obj in filenames:
+      img, img_np, tf_img_shape = image_read(img_obj["img"])
 
-      ComponentType = itk.ctype('float')
-      OutputImageType = itk.VectorImage[ComponentType, Dimension]
+      prediction = sess.run(
+          'output_y:0',
+          feed_dict={
+              'input_x:0': np.reshape(img_np, (1,) + img_np.shape)
+          }
+      )
 
-      out_img = OutputImageType.New()
-      out_img.SetNumberOfComponentsPerPixel(PixelDimension)
-      
-    size = itk.Size[Dimension]()
-    size.Fill(1)
-    prediction_shape = list(prediction.shape[0:-1])
-    prediction_shape.reverse()
-
-    for i, s in enumerate(prediction_shape):
-      size[i] = s
-
-    index = itk.Index[Dimension]()
-    index.Fill(0)
-
-    RegionType = itk.ImageRegion[Dimension]
-    region = RegionType()
-    region.SetIndex(index)
-    region.SetSize(size)
-    
-    # out_img.SetRegions(img.GetLargestPossibleRegion())
-    out_img.SetRegions(region)
-    out_img.SetDirection(img.GetDirection())
-    out_img.SetOrigin(img.GetOrigin())
-    out_img.SetSpacing(img.GetSpacing())
-    out_img.Allocate()
-
-    out_img_np = itk.GetArrayViewFromImage(out_img)
-    out_img_np.setfield(np.reshape(prediction, out_img_np.shape), out_img_np.dtype)
-
-    print("Writing:", img_obj["out"])
-    writer = itk.ImageFileWriter.New(FileName=img_obj["out"], Input=out_img)
-    writer.UseCompressionOn()
-    writer.Update()
+      prediction = np.array(prediction[0])
+      image_save(img_obj, prediction)
     
