@@ -228,7 +228,7 @@ class NN(base_nn.BaseNN):
 
         logits_flat = tf.reshape(logits, [batch_size, -1])
 
-        labels = tf.one_hot(tf.cast(labels, tf.int32), 3)
+        labels = tf.one_hot(tf.cast(labels, tf.int32), self.num_classes)
         labels_flat = tf.reshape(tf.cast(labels, tf.float32), [batch_size, -1])
 
         intersection = 2.0 * tf.reduce_sum(logits_flat * labels_flat, axis=1) + 1e-7
