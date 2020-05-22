@@ -141,7 +141,7 @@ class NN(base_nn.BaseNN):
                 x = self.up_convolution2d(x, name="up_conv1_op", filter_shape=[3,3,32,64], output_shape=block0_0_shape, strides=[1,2,2,1], padding="SAME", use_bias=False, activation=None, ps_device=ps_device, w_device=w_device)
                 x = tf.layers.batch_normalization(x, training=is_training)
                 x = tf.nn.leaky_relu(x)
-                x = self.up_convolution2d(x, name="up_conv2_op", filter_shape=[3,3,3,32], output_shape=[shape[0], shape[1], shape[2], self.num_classes], strides=[1,2,2,1], padding="SAME", use_bias=False, activation=None, ps_device=ps_device, w_device=w_device)
+                x = self.up_convolution2d(x, name="up_conv2_op", filter_shape=[3,3,self.num_classes,32], output_shape=[shape[0], shape[1], shape[2], self.num_classes], strides=[1,2,2,1], padding="SAME", use_bias=False, activation=None, ps_device=ps_device, w_device=w_device)
                 x = tf.nn.sigmoid(x)
             return x
 
