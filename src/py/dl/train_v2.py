@@ -26,24 +26,20 @@ output_param_group.add_argument('--model', help='Output modelname, the output na
 
 train_param_group = parser.add_argument_group('Training parameters')
 train_param_group.add_argument('--nn', type=str, help='Type of neural network to use', default=None)
+train_param_group.add_argument('--sample_weight', nargs="+", type=float, help='Weight for each class if training classification in unbalanced data-set', default=None)
 train_param_group.add_argument('--nn2', type=str, help='Type of neural network to use', default=None)
 train_param_group.add_argument('--drop_prob', help='The probability that each element is dropped during training', type=float, default=0.0)
 train_param_group.add_argument('--learning_rate', help='Learning rate, default=1e-5', type=float, default=1e-03)
-train_param_group.add_argument('--learning_rate_discriminator_mul', help='Factor for the learning rate for the discriminator (to make it slower/faster)', type=float, default=1)
-train_param_group.add_argument('--skip_steps', help='Number of skip steps for gan_512 training', type=int, default=10)
 train_param_group.add_argument('--decay_rate', help='decay rate, default=0.96', type=float, default=0.96)
 train_param_group.add_argument('--decay_steps', help='decay steps, default=10000', type=int, default=1000)
 train_param_group.add_argument('--staircase', help='staircase decay', type=bool, default=False)
 train_param_group.add_argument('--batch_size', help='Batch size for evaluation', type=int, default=8)
 train_param_group.add_argument('--num_epochs', help='Number of epochs', type=int, default=10)
 train_param_group.add_argument('--buffer_size', help='Shuffle buffer size', type=int, default=1000)
-train_param_group.add_argument('--ps_device', help='Process device', type=str, default='/cpu:0')
-train_param_group.add_argument('--w_device', help='Worker device', type=str, default='/cpu:0')
+train_param_group.add_argument('--summary_writer', help='Number of steps to write summary', type=int, default=100)
 
 continue_param_group = parser.add_argument_group('Continue training', 'Use a previously saved model to continue the training.')
-continue_param_group.add_argument('--restore_all', help='Restore all variables from the model or partially (check the implementation of restore for the given nn)', type=bool, default=False)
 continue_param_group.add_argument('--in_model', help='Input model name', default=None)
-continue_param_group.add_argument('--in_step', type=int, help='Set the step number to start', default=0)
 continue_param_group.add_argument('--in_model2', help='Input model name', default=None)
 
 export_param_group = parser.add_argument_group('Export as save_model format')
@@ -51,28 +47,25 @@ export_param_group.add_argument('--save_model', help='Export folder', default=No
 
 args = parser.parse_args()
 
+# Input Group
 json_filename = args.json
-neural_network = args.nn
-neural_network2 = args.nn2
+
+#Output Group
 outvariablesdirname = args.out
 modelname = args.model
-drop_prob = args.drop_prob
-learning_rate = args.learning_rate
-learning_rate_discriminator_mul = args.learning_rate_discriminator_mul
-decay_rate = args.decay_rate
-decay_steps = args.decay_steps
-staircase = args.staircase
+
+# Train params
+neural_network = args.nn
+neural_network2 = args.nn2
+
+# In models to continue training
+in_model = args.in_model
+in_model2 = args.in_model2
+
+# Train params
 batch_size = args.batch_size
 num_epochs = args.num_epochs
 buffer_size = args.buffer_size
-skip_steps = args.skip_steps
-ps_device = args.ps_device
-w_device = args.w_device
-
-in_model = args.in_model
-in_model2 = args.in_model2
-in_step = args.in_step
-restore_all = args.restore_all
 
 save_model = args.save_model
 
@@ -80,12 +73,13 @@ tf_inputs = TFInputs(json_filename=json_filename)
 dataset = tf_inputs.tf_inputs(batch_size=batch_size, buffer_size=buffer_size)
 
 NN = importlib.import_module("nn_v2." + neural_network).NN
-nn = NN(tf_inputs, learning_rate = learning_rate, decay_steps = decay_steps, decay_rate = decay_rate, staircase = staircase, drop_prob = drop_prob)
+nn = NN(tf_inputs, args)
 
 if(neural_network2):
 	NN2 = importlib.import_module("nn_v2." + neural_network2).NN
-	nn2 = NN2(tf_inputs, learning_rate = learning_rate, decay_steps = decay_steps, decay_rate = decay_rate, staircase = staircase, drop_prob = drop_prob)
+	nn2 = NN2(tf_inputs, args)
 	if(in_model2):
+		print("loading nn2:", in_model2)
 		latest = tf.train.latest_checkpoint(in_model2)
 		nn2.load_weights(latest)
 
@@ -102,20 +96,22 @@ if(neural_network2):
 
 # # history = model.fit(dataset, epochs=num_epochs, callbacks=nn.callbacks(checkpoint_path, summary_path))
 
-summary_writer = tf.summary.create_file_writer(os.path.join(outvariablesdirname, modelname + "-" + str(datetime.now())))
-checkpoint_path = os.path.join(outvariablesdirname, modelname)
-
-ckpt = nn.get_checkpoint_manager()
-
-checkpoint_manager = tf.train.CheckpointManager(ckpt, checkpoint_path, max_to_keep=3, checkpoint_name=modelname)
-
 if(in_model):
 	latest = tf.train.latest_checkpoint(in_model)
+	print("loading:", latest)
 	nn.load_weights(latest)
 
 if(save_model):
+	print("Saving model to:", save_model)
 	nn.save_model(save_model)
 else:
+	summary_writer = tf.summary.create_file_writer(os.path.join(outvariablesdirname, modelname + "-" + str(datetime.now())))
+	checkpoint_path = os.path.join(outvariablesdirname, modelname)
+
+	ckpt = nn.get_checkpoint_manager()
+
+	checkpoint_manager = tf.train.CheckpointManager(ckpt, checkpoint_path, max_to_keep=3, checkpoint_name=modelname)
+
 	with summary_writer.as_default():
 
 		step = 0
@@ -127,7 +123,7 @@ else:
 				tr_strep = nn.train_step(image_batch)
 				step+=1
 
-				if step % 100 == 0:
+				if step % args.summary_writer == 0:
 					nn.summary(image_batch, tr_strep, step)
 					summary_writer.flush()
 

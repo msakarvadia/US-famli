@@ -7,9 +7,15 @@ import os
 
 class NN(tf.keras.Model):
 
-    def __init__(self, tf_inputs, learning_rate = 1e-4, decay_steps = 10000, decay_rate = 0.96, staircase = 0, drop_prob = 0):
+    def __init__(self, tf_inputs, args):
         super(NN, self).__init__()
         
+        learning_rate = args.learning_rate
+        decay_steps = args.decay_steps
+        decay_rate = args.decay_rate
+        staircase = args.staircase
+        drop_prob = args.drop_prob
+
         data_description = tf_inputs.get_data_description()
         self.num_channels = data_description[data_description["data_keys"][1]]["shape"][-1]
 
@@ -18,7 +24,7 @@ class NN(tf.keras.Model):
         self.encoder = self.make_encoder_model()
         self.generator = self.make_generator_model()
 
-        self.gaussian = tf.keras.layers.GaussianNoise(1.0)
+        self.sphere_loss = tf.keras.losses.MeanAbsoluteError()
 
         self.encoder.summary()
         self.generator.summary()
@@ -32,42 +38,31 @@ class NN(tf.keras.Model):
 
         model = tf.keras.Sequential()
 
-        model.add(layers.Dense(4*4*1024, use_bias=False, input_shape=(4096,)))
-        model.add(layers.BatchNormalization())
-        model.add(layers.LeakyReLU())
-        model.add(layers.Reshape((4, 4, 1024)))
-        model.add(layers.Dropout(self.drop_prob))
-
-        model.add(layers.Conv2DTranspose(512, (3, 3), strides=(2, 2), padding='same', use_bias=False))
-        model.add(layers.BatchNormalization())
+        model.add(layers.Conv2DTranspose(2048, (3, 3), input_shape=(1, 1, 4096), strides=(2, 2), padding='same'))
         model.add(layers.LeakyReLU())
 
-        model.add(layers.Conv2DTranspose(256, (3, 3), strides=(2, 2), padding='same', use_bias=False))
-        model.add(layers.BatchNormalization())
+        model.add(layers.Conv2DTranspose(1024, (3, 3), strides=(2, 2), padding='same'))
         model.add(layers.LeakyReLU())
-        model.add(layers.Dropout(self.drop_prob))
 
-        model.add(layers.Conv2DTranspose(128, (3, 3), strides=(2, 2), padding='same', use_bias=False))
-        model.add(layers.BatchNormalization())
+        model.add(layers.Conv2DTranspose(512, (3, 3), strides=(2, 2), padding='same'))
         model.add(layers.LeakyReLU())
-        model.add(layers.Dropout(self.drop_prob))
 
-        model.add(layers.Conv2DTranspose(128, (3, 3), strides=(2, 2), padding='same', use_bias=False))
-        model.add(layers.BatchNormalization())
+        model.add(layers.Conv2DTranspose(256, (3, 3), strides=(2, 2), padding='same'))
         model.add(layers.LeakyReLU())
-        model.add(layers.Dropout(self.drop_prob))
 
-        model.add(layers.Conv2DTranspose(64, (3, 3), strides=(2, 2), padding='same', use_bias=False))
-        model.add(layers.BatchNormalization())
+        model.add(layers.Conv2DTranspose(128, (3, 3), strides=(2, 2), padding='same'))
         model.add(layers.LeakyReLU())
-        model.add(layers.Dropout(self.drop_prob))
 
-        model.add(layers.Conv2DTranspose(64, (3, 3), strides=(2, 2), padding='same', use_bias=False))
-        model.add(layers.BatchNormalization())
+        model.add(layers.Conv2DTranspose(128, (3, 3), strides=(2, 2), padding='same'))
         model.add(layers.LeakyReLU())
-        model.add(layers.Dropout(self.drop_prob))
 
-        model.add(layers.Conv2DTranspose(self.num_channels, (3, 3), strides=(2, 2), padding='same', use_bias=False))
+        model.add(layers.Conv2DTranspose(64, (3, 3), strides=(2, 2), padding='same'))
+        model.add(layers.LeakyReLU())
+
+        model.add(layers.Conv2DTranspose(64, (3, 3), strides=(2, 2), padding='same'))
+        model.add(layers.LeakyReLU())
+
+        model.add(layers.Conv2DTranspose(self.num_channels, (3, 3), strides=(2, 2), padding='same'))
 
         return model
 
@@ -76,59 +71,49 @@ class NN(tf.keras.Model):
         model = tf.keras.Sequential()
 
         model.add(layers.BatchNormalization(input_shape=[512, 512, self.num_channels]))
+        model.add(layers.Conv2D(64, (3, 3), strides=(2, 2), padding='same'))
+        model.add(layers.LeakyReLU())
 
         model.add(layers.Conv2D(64, (3, 3), strides=(2, 2), padding='same'))
-        model.add(layers.BatchNormalization())
         model.add(layers.LeakyReLU())
-        model.add(layers.Dropout(self.drop_prob))
-
-        model.add(layers.Conv2D(64, (3, 3), strides=(2, 2), padding='same'))
-        model.add(layers.BatchNormalization())
-        model.add(layers.LeakyReLU())
-        model.add(layers.Dropout(self.drop_prob))
 
         model.add(layers.Conv2D(128, (3, 3), strides=(2, 2), padding='same'))
-        model.add(layers.BatchNormalization())
         model.add(layers.LeakyReLU())
-        model.add(layers.Dropout(self.drop_prob))
 
         model.add(layers.Conv2D(128, (3, 3), strides=(2, 2), padding='same'))
-        model.add(layers.BatchNormalization())
         model.add(layers.LeakyReLU())
-        model.add(layers.Dropout(self.drop_prob))
 
         model.add(layers.Conv2D(256, (3, 3), strides=(2, 2), padding='same'))
-        model.add(layers.BatchNormalization())
         model.add(layers.LeakyReLU())
-        model.add(layers.Dropout(self.drop_prob))
 
         model.add(layers.Conv2D(512, (3, 3), strides=(2, 2), padding='same'))
-        model.add(layers.BatchNormalization())
         model.add(layers.LeakyReLU())
-        model.add(layers.Dropout(self.drop_prob))
 
         model.add(layers.Conv2D(1024, (3, 3), strides=(2, 2), padding='same'))
-        model.add(layers.BatchNormalization())
         model.add(layers.LeakyReLU())
-        model.add(layers.Dropout(self.drop_prob))
 
-        model.add(layers.Reshape((4*4*1024,)))
-        model.add(layers.Dense(4096, use_bias=False))
+        model.add(layers.Conv2D(2048, (3, 3), strides=(2, 2), padding='same'))
+        model.add(layers.LeakyReLU())
+
+        model.add(layers.Conv2D(4096, (3, 3), strides=(2, 2), padding='same'))
 
         return model
 
     @tf.function
-    def train_step(self, images):
+    def train_step(self, train):
         
-        noise_images = self.gaussian(images[1])
-        noise_images = tf.divide(tf.subtract(noise_images, tf.reduce_min(noise_images)), tf.subtract(tf.reduce_max(noise_images), tf.reduce_min(noise_images)))
+        # noise_images = self.gaussian(images[1])
+        # noise_images = tf.divide(tf.subtract(noise_images, tf.reduce_min(noise_images)), tf.subtract(tf.reduce_max(noise_images), tf.reduce_min(noise_images)))
+        images = train[0]/255
+        labels = train[1]/255
 
         with tf.GradientTape() as tape:
-            
-            x_e = self.encode(noise_images)
-            x_logit = self.decode(x_e)
+            x = self.encode(images)
+            x_n, x_norm = tf.linalg.normalize(tf.reshape(x, shape=(tf.shape(x)[0], 4096)), axis=1)
 
-            loss = tf.reduce_mean(tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(logits=x_logit, labels=noise_images), axis=[1, 2, 3]))
+            x_logit = self.decode(x)
+
+            loss = self.compute_loss(x_logit, labels) + self.sphere_loss(x_norm, tf.ones_like(x_norm))
             
             var_list = self.trainable_variables
             
@@ -138,21 +123,37 @@ class NN(tf.keras.Model):
             return loss, x_logit
 
     @tf.function
-    def encode(self, images, mean=0., sigma=1.):
-        x_e = self.encoder(images)
-        return tf.math.abs(tf.linalg.normalize(x_e, axis=1)[0])
+    def encode(self, images):
+        return self.encoder(images)
 
     def save_model(self, save_model):
-        self.encoder.save(save_model)
-        # self.generator.save(save_model)
+        model = tf.keras.Sequential([layers.Lambda(lambda x: x/255, input_shape=(512, 512, self.num_channels))] + self.encoder.layers)
+        model.summary()
+        model.save(save_model)
+
+    @tf.function
+    def compute_loss(self, x_logit, labels):
+        cross_ent = tf.nn.sigmoid_cross_entropy_with_logits(logits=x_logit, labels=labels)
+        return tf.reduce_mean(tf.reduce_sum(cross_ent, axis=[1, 2, 3]))
+
+    @tf.function
+    def log_normal_pdf(self, sample, mean, logvar, raxis=1):
+        log2pi = tf.math.log(2. * np.pi)
+        return tf.reduce_sum(-.5 * ((sample - mean) ** 2. * tf.exp(-logvar) + logvar + log2pi), axis=raxis)
         
-    def sample(self):
-        x_e = tf.linalg.normalize(tf.random.normal(shape=(3, 4096)), axis=1)[0]
-        x_e = tf.math.abs(x_e)
-        return self.decode(x_e, apply_sigmoid=True)
+    @tf.function
+    def sample(self, eps=None):
+        if eps is None:
+            eps = tf.random.normal(shape=(3, 512))
+        return self.decode(eps, apply_sigmoid=True)
+
+    @tf.function
+    def reparameterize(self, mean, logvar):
+        eps = tf.random.normal(shape=mean.shape)
+        return eps * tf.exp(logvar * .5) + mean
 
     def decode(self, z, apply_sigmoid=False):
-        logits = self.generator(z)
+        logits = self.generator(z, training=True)
         if apply_sigmoid:
             probs = tf.sigmoid(logits)
             return probs
@@ -168,11 +169,11 @@ class NN(tf.keras.Model):
         loss = tr_step[0]
         x_logit = tr_step[1]
 
-        print("loss", loss.numpy())
+        print("step", step, "loss", loss.numpy())
         tf.summary.scalar('loss', loss, step=step)
-        tf.summary.image('real', images[1]/255, step=step)
+        tf.summary.image('real', images[0]/255, step=step)
         tf.summary.image('generated', tf.sigmoid(x_logit), step=step)
-        tf.summary.image('sampled', self.sample(), step=step)
+        # tf.summary.image('sampled', self.sample(), step=step)
     
     
     def mutual_info_histo(self, hist2d):

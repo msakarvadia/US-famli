@@ -206,14 +206,14 @@ def main(args):
 							raise "The images in your training set do not have the same dimensions!"
 
 					if(not "max" in obj[key]):
-						obj[key]["max"] = np.max(img_np)
+						obj[key]["max"] = float(np.max(img_np))
 					else:
-						obj[key]["max"] = max(obj[key]["max"], np.max(img_np))
+						obj[key]["max"] = max(obj[key]["max"], float(np.max(img_np)))
 
 					if(not "min" in obj[key]):
-						obj[key]["min"] = np.min(img_np)
+						obj[key]["min"] = float(np.min(img_np))
 					else:
-						obj[key]["min"] = min(obj[key]["min"], np.min(img_np))
+						obj[key]["min"] = min(obj[key]["min"], float(np.min(img_np)))
 
 					if(not "type" in obj[key]):
 						obj[key]["type"] = "tf.float32"

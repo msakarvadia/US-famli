@@ -5,12 +5,20 @@ from tensorflow.keras import layers
 from tensorflow.keras import activations
 import os
 
-class NN():
+class NN(tf.keras.Model):
 
-    def __init__(self, tf_inputs, learning_rate = 1e-4, decay_steps = 10000, decay_rate = 0.96, staircase = 0, drop_prob = 0):
+    def __init__(self, tf_inputs, args):
         super(NN, self).__init__()
 
-        self.num_channels = 1
+        learning_rate = args.learning_rate
+        decay_steps = args.decay_steps
+        decay_rate = args.decay_rate
+        staircase = args.staircase
+        drop_prob = args.drop_prob
+
+        data_description = tf_inputs.get_data_description()
+        
+        self.num_channels = data_description[data_description["data_keys"][1]]["shape"][-1]
 
         self.discriminator = self.make_discriminator_model()
         self.generator = self.make_generator_model()
@@ -26,7 +34,7 @@ class NN():
 
     def make_generator_model(self):
 
-        model = tf.keras.Sequential()
+        model = tf.keras.Sequential(name="generator_512")
         model.add(layers.Dense(4*4*1024, use_bias=False, input_shape=(4096,), kernel_initializer=tf.random_normal_initializer(mean=0,stddev=0.01)))
         model.add(layers.BatchNormalization())
         model.add(layers.LeakyReLU(name="block0"))
@@ -63,43 +71,45 @@ class NN():
 
     def make_discriminator_model(self):
 
-        model = tf.keras.Sequential()
+        model = tf.keras.Sequential(name="discriminator_512")
 
         model.add(layers.BatchNormalization(input_shape=[512, 512, self.num_channels]))
-        model.add(layers.Conv2D(64, (5, 5), strides=(2, 2), use_bias=False, padding='same'))
+        model.add(layers.Conv2D(64, (5, 5), strides=(1, 1), use_bias=False, padding='same'))
         model.add(layers.BatchNormalization())
         model.add(layers.LeakyReLU())
-        # model.add(layers.AveragePooling2D((2, 2), name="block0"))
+        model.add(layers.AveragePooling2D((2, 2), name="block0"))
 
-        model.add(layers.Conv2D(64, (3, 3), strides=(2, 2), use_bias=False, padding='same'))
+        model.add(layers.Conv2D(64, (3, 3), strides=(1, 1), use_bias=False, padding='same'))
         model.add(layers.BatchNormalization())
         model.add(layers.LeakyReLU())
-        # model.add(layers.AveragePooling2D((2, 2), name="block1"))
+        model.add(layers.AveragePooling2D((2, 2), name="block1"))
 
-        model.add(layers.Conv2D(128, (3, 3), strides=(2, 2), use_bias=False, padding='same'))
+        model.add(layers.Conv2D(128, (3, 3), strides=(1, 1), use_bias=False, padding='same'))
         model.add(layers.BatchNormalization())
         model.add(layers.LeakyReLU())
-        # model.add(layers.AveragePooling2D((2, 2), name="block2"))
+        model.add(layers.AveragePooling2D((2, 2), name="block2"))
 
-        model.add(layers.Conv2D(128, (3, 3), strides=(2, 2), use_bias=False, padding='same'))
+        model.add(layers.Conv2D(128, (3, 3), strides=(1, 1), use_bias=False, padding='same'))
         model.add(layers.BatchNormalization())
         model.add(layers.LeakyReLU())
-        # model.add(layers.AveragePooling2D((2, 2), name="block3"))
+        model.add(layers.AveragePooling2D((2, 2), name="block3"))
 
-        model.add(layers.Conv2D(256, (3, 3), strides=(2, 2), use_bias=False, padding='same'))
+        model.add(layers.Conv2D(256, (3, 3), strides=(1, 1), use_bias=False, padding='same'))
         model.add(layers.BatchNormalization())
         model.add(layers.LeakyReLU())
-        # model.add(layers.AveragePooling2D((2, 2), name="block4"))
+        model.add(layers.AveragePooling2D((2, 2), name="block4"))
 
-        model.add(layers.Conv2D(512, (3, 3), strides=(2, 2), use_bias=False, padding='same'))
+        model.add(layers.Conv2D(512, (3, 3), strides=(1, 1), use_bias=False, padding='same'))
         model.add(layers.BatchNormalization())
         model.add(layers.LeakyReLU())
-        # model.add(layers.AveragePooling2D((2, 2), name="block5"))
+        model.add(layers.AveragePooling2D((2, 2), name="block5"))
 
-        model.add(layers.Conv2D(1024, (3, 3), strides=(2, 2), use_bias=False, padding='same'))
+        model.add(layers.Conv2D(1024, (3, 3), strides=(1, 1), use_bias=False, padding='same'))
         model.add(layers.BatchNormalization())
-        model.add(layers.LeakyReLU(name="block6"))
+        model.add(layers.LeakyReLU())
+        model.add(layers.AveragePooling2D((2, 2), name="block6"))
 
+        model.add(layers.Reshape((4*4*1024,)))
         model.add(layers.Dense(1, use_bias=False, name="block7"))
 
         return model
@@ -120,7 +130,7 @@ class NN():
     def train_step(self, images):
         images = images[1]/255
         batch_size = tf.shape(images)[0]
-        noise = tf.linalg.normalize(tf.random.normal([batch_size, 4096]), axis=1)[0]
+        noise = tf.math.abs(tf.linalg.normalize(tf.random.normal([batch_size, 4096]), axis=1)[0])
 
         with tf.GradientTape() as gen_tape, tf.GradientTape() as disc_tape:
             generated_images = tf.nn.sigmoid(self.generator(noise, training=True))
@@ -128,7 +138,7 @@ class NN():
             fake_output = self.discriminator(generated_images, training=True)
             real_output = self.discriminator(images, training=True)
 
-            gen_loss = self.generator_loss(fake_output)
+            gen_loss = self.generator_loss(fake_output) + self.emd(generated_images, images)
             disc_loss = self.discriminator_loss(real_output, fake_output)
 
         gradients_of_generator = gen_tape.gradient(gen_loss, self.generator.trainable_variables)
@@ -161,59 +171,6 @@ class NN():
             discriminator=self.discriminator, 
             generator_optimizer=self.generator_optimizer,
             discriminator_optimizer=self.discriminator_optimizer)
-               
-    def mutual_info_histo(self, hist2d):
-        # Get probability
-        pxy = tf.divide(hist2d, tf.reduce_sum(hist2d))
-        # marginal for x over y
-        px = tf.reduce_sum(pxy, axis=1)
-        # marginal for y over x
-        py = tf.reduce_sum(pxy, axis=0)
-
-        px_py = tf.multiply(px[:, None], py[None, :])
-
-        px_py = tf.boolean_mask(px_py, pxy)
-        pxy = tf.boolean_mask(pxy, pxy)
-
-        return tf.reduce_sum(tf.multiply(pxy, tf.math.log(tf.math.divide(pxy, px_py))))
-
-    def histogram(self, x, y, nbins=100, range_h=None):
-        
-        shape = tf.shape(y)
-        batch_size = shape[0]
-        
-        x = tf.reshape(x, [-1])
-        y = tf.reshape(y, [-1])
-        
-        if range_h is None:
-            range_h = [tf.reduce_min(tf.concat([x, y], axis=-1)), tf.reduce_max(tf.concat([x, y], axis=-1))]
-        
-        # hisy_bins is a Tensor holding the indices of the binned values whose shape matches y.
-        histy_bins = tf.histogram_fixed_width_bins(y, range_h, nbins=nbins, dtype=tf.int32)
-        # and creates a histogram_fixed_width 
-        H = tf.map_fn(lambda i: tf.histogram_fixed_width(tf.boolean_mask(x, tf.equal(histy_bins, i)), range_h, nbins=nbins, dtype=tf.int32), tf.range(nbins))
-        
-        return tf.cast(H, dtype=tf.float32)
-
-    def mutual_info(self, x, y, nbins=255):
-        return self.mutual_info_histo(self.histogram(x, y))
-
-    def mutual_info_channels(self, x, y, nbins=255):
-        xy = tf.stack([tf.unstack(x, axis=-1), tf.unstack(y, axis=-1)], axis=1)
-        return tf.reduce_sum(tf.map_fn(lambda xy_c: self.mutual_info(xy_c[0], xy_c[1]), xy, dtype=tf.float32))
-
-    def emd_layers(self, generator_layers, discriminator_layers):
-        
-        g_b1 = generator_layers[0]
-        d_b5 = discriminator_layers[2]
-        
-        g_b3 = generator_layers[1]
-        d_b3 = discriminator_layers[1]
-
-        g_b5 = generator_layers[2]
-        d_b1 = discriminator_layers[0]
-
-        return tf.reduce_sum([self.emd(g_b1, d_b5), self.emd(g_b3, d_b3), self.emd(g_b5, d_b1)])
 
     @tf.function
     def emd(self, x, y, nbins=255):

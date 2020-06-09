@@ -167,17 +167,13 @@ def image_save(img_obj, prediction):
 
 
 if(int(tf.__version__.split('.')[0]) > 1):
-  model = tf.keras.models.load_model(saved_model_path)
+  model = tf.keras.models.load_model(saved_model_path, custom_objects={'tf': tf})
   model.summary()
-  for layer in model.layers:
-    if("batch_normalization" in layer.name):
-      layer.training = True
 
   for img_obj in filenames:
       img, img_np, tf_img_shape = image_read(img_obj["img"])
-      print(np.linalg.norm(img_np))
-      prediction = tf.sigmoid(model.predict(np.reshape(img_np, (1,4096))))
-
+      
+      prediction = model.predict(np.reshape(img_np, tf_img_shape))
       prediction = np.array(prediction[0])
       image_save(img_obj, prediction)
 

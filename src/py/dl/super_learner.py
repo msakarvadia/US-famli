@@ -291,18 +291,24 @@ test_ds = df_to_dataset(test, shuffle=False, batch_size=batch_size)
 model = tf.keras.Sequential([
   feature_layer,
   layers.BatchNormalization(),
+  layers.Dense(4096),
+  layers.BatchNormalization(),
+  layers.LeakyReLU(),
+  layers.Dense(2048),
+  layers.BatchNormalization(),
+  layers.LeakyReLU(),
   layers.Dense(1024),
   layers.BatchNormalization(),
-  layers.ReLU(),
+  layers.LeakyReLU(),
   layers.Dense(512),
   layers.BatchNormalization(),
-  layers.ReLU(),
+  layers.LeakyReLU(),
   layers.Dense(256),
   layers.BatchNormalization(),
-  layers.ReLU(),
+  layers.LeakyReLU(),
   layers.Dense(128),
   layers.BatchNormalization(),
-  layers.ReLU(),
+  layers.LeakyReLU(),
   layers.Dense(1)
 ])
 
@@ -312,7 +318,7 @@ model.compile(optimizer='adam',
 
 model.fit(train_ds,
           validation_data=val_ds,
-          epochs=100)
+          epochs=150)
 
 loss, accuracy = model.evaluate(test_ds)
 print("Accuracy", accuracy)

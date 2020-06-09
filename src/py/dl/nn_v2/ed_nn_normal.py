@@ -7,18 +7,30 @@ import os
 
 class NN(tf.keras.Model):
 
-    def __init__(self, learning_rate, decay_steps, decay_rate, staircase):
+    def __init__(self, tf_inputs, args):
         super(NN, self).__init__()
+
+        learning_rate = args.learning_rate
+        decay_steps = args.decay_steps
+        decay_rate = args.decay_rate
+        staircase = args.staircase
+        drop_prob = args.drop_prob
+        sample_weight = args.sample_weight
         
-        self.num_channels = 3
+        data_description = tf_inputs.get_data_description()
+        self.num_channels = data_description[data_description["data_keys"][1]]["shape"][-1]
 
-        self.encoder = self.make_encoder_model()
-        self.generator = self.make_generator_model()
+        self.drop_prob = drop_prob
 
-        self.encoder.summary()
-        self.generator.summary()
+        self.encoder_n = self.make_encoder_model()
+        self.generator_n = self.make_generator_model()
 
-        self.optimizer = tf.keras.optimizers.Adam(1e-4)
+        self.encoder_n.summary()
+        self.generator_n.summary()
+
+        lr = tf.keras.optimizers.schedules.ExponentialDecay(learning_rate, decay_steps, decay_rate, staircase)
+
+        self.optimizer = tf.keras.optimizers.Adam(lr)
         
     def set_nn2(self, ed_nn):
         ed_nn.trainable = False
@@ -27,10 +39,12 @@ class NN(tf.keras.Model):
     def make_generator_model(self):
 
         model = tf.keras.Sequential()
-        model.add(layers.Dense(4*4*1024, use_bias=False, input_shape=(4096,)))
-        model.add(layers.BatchNormalization())
+
+        model.add(layers.Conv2DTranspose(1024, (3, 3), input_shape=(1, 1, 1024), strides=(2, 2), padding='same'))
         model.add(layers.LeakyReLU())
-        model.add(layers.Reshape((4, 4, 1024)))
+
+        model.add(layers.Conv2DTranspose(1024, (3, 3), strides=(2, 2), padding='same'))
+        model.add(layers.LeakyReLU())
 
         return model
 
@@ -38,10 +52,7 @@ class NN(tf.keras.Model):
 
         model = tf.keras.Sequential()
         
-        model.add(layers.Reshape((4*4*1024,), input_shape=(4*4*1024,)))
-        model.add(layers.Dense(4096, use_bias=False))
-        model.add(layers.BatchNormalization())
-        model.add(layers.LeakyReLU())
+        model.add(layers.AveragePooling2D(pool_size=(4, 4), input_shape=(4, 4, 1024)))
 
         return model
 
@@ -54,18 +65,18 @@ class NN(tf.keras.Model):
             x_e = self.encode(self.ed_nn.encode(train_images))
             x_logit = self.ed_nn.decode(self.decode(x_e))
 
-            loss = tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(logits=x_logit, labels=train_images))
-            batch_size = tf.shape(x_e)[0]
-
-            loss += self.emd(x_e, tf.random.normal([batch_size, 4096]))
+            cross_ent = tf.nn.sigmoid_cross_entropy_with_logits(logits=x_logit, labels=train_images)
+            loss = tf.reduce_mean(tf.reduce_sum(cross_ent, axis=[1, 2, 3]))
+            
             var_list = self.trainable_variables
+
             gradients = tape.gradient(loss, var_list)
             self.optimizer.apply_gradients(zip(gradients, var_list))
 
             return loss, x_logit
 
     def encode(self, x):
-        return self.encoder(x)
+        return self.encoder_n(x)
 
     def log_normal_pdf(self, sample, mean, logvar, raxis=1):
         log2pi = tf.math.log(2. * np.pi)
@@ -76,26 +87,32 @@ class NN(tf.keras.Model):
         return eps * tf.exp(logvar * .5) + mean
 
     def decode(self, z, apply_sigmoid=False):
-        logits = self.generator(z)
+        logits = self.generator_n(z)
         if apply_sigmoid:
             probs = tf.sigmoid(logits)
             return probs
         return logits
 
     def get_checkpoint_manager(self):
-        return tf.train.Checkpoint(encoder=self.encoder,
-            generator=self.generator, 
+        return tf.train.Checkpoint(encoder_n=self.encoder_n,
+            encoder=self.ed_nn.encoder,
+            generator_n=self.generator_n, 
+            generator=self.ed_nn.generator,
             optimizer=self.optimizer)
 
     def summary(self, images, tr_step, step):
 
         loss = tr_step[0]
         x_logit = tr_step[1]
-        print("loss", loss.numpy())
+        print("step", step, "loss", loss.numpy())
         tf.summary.scalar('loss', loss, step=step)
         tf.summary.image('real', images[1]/255, step=step)
         tf.summary.image('generated', tf.sigmoid(x_logit), step=step)
 
+    def save_model(self, save_model):
+        layers = self.ed_nn.encoder.layers + self.encoder_n.layers
+        model = tf.keras.Sequential(layers)
+        model.save(save_model)
     
     def histogram(self, x, y, nbins=100, range_h=None):
         

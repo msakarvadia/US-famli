@@ -36,6 +36,16 @@ class TFInputs():
     def get_data_description(self):
         return self.data_description
 
+    def get_class_names(self):
+        data_description = self.data_description
+        if("enumerate" in data_description):
+            class_dict = data_description[data_description["enumerate"]]["class"]
+            class_obj = {}
+            for key in class_dict:
+              class_obj[class_dict[key]] = key
+            return class_obj.values()
+        return []
+
     def read_and_decode(self, record):
         
         parsed = tf.io.parse_single_example(record, self.keys_to_features)

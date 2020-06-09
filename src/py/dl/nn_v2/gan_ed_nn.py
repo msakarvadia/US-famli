@@ -7,13 +7,20 @@ import os
 
 class NN(tf.keras.Model):
 
-    def __init__(self, tf_inputs, learning_rate = 1e-4, decay_steps = 10000, decay_rate = 0.96, staircase = 0, drop_prob = 0):
+    def __init__(self, tf_inputs, args):
         super(NN, self).__init__()
+
+        learning_rate = args.learning_rate
+        decay_steps = args.decay_steps
+        decay_rate = args.decay_rate
+        staircase = args.staircase
+        drop_prob = args.drop_prob
+        sample_weight = args.sample_weight
 
         data_description = tf_inputs.get_data_description()
         
         self.num_channels = data_description[data_description["data_keys"][1]]["shape"][-1]
-        self.reg_constant = 1e-4
+        self.reg_constant = 1e-3
         self.drop_prob = drop_prob
         
         # self.projection = self.make_projection_model()
@@ -214,15 +221,17 @@ class NN(tf.keras.Model):
             
             x_e = tf.math.abs(tf.linalg.normalize(self.encoder(images, training=True), axis=1)[0])
             x_logit = self.generator(x_e, training=True)
-            
+
+            enc_loss = tf.reduce_mean(tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(logits=x_logit, labels=images), axis=[1, 2, 3]))
+
             generated_images = tf.nn.sigmoid(self.generator(noise, training=True))
 
             real_output = self.discriminator(images, training=True)
             fake_output = self.discriminator(generated_images, training=True)
+            fake_output_x = self.discriminator(tf.nn.sigmoid(x_logit), training=True)
             
-            enc_loss = tf.reduce_mean(tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(logits=x_logit, labels=images), axis=[1, 2, 3]))
             # gen_loss = self.generator_loss(fake_output) + enc_loss*(tf.cast(self.step % self.skip_steps < 1, dtype=tf.float32))*1e-7
-            gen_loss = self.generator_loss(fake_output) + enc_loss*self.reg_constant
+            gen_loss = self.generator_loss(fake_output) + self.generator_loss(fake_output_x) + enc_loss*self.reg_constant
             
             # enc_loss -= self.GeodesicDistances(x_e)
 
