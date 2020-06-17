@@ -9,6 +9,7 @@ import glob
 import itk
 import sys
 import csv
+import resample
 
 
 print("Tensorflow version:", tf.__version__)
@@ -19,11 +20,12 @@ in_group = parser.add_mutually_exclusive_group(required=True)
 in_group.add_argument('--img', type=str, help='Input image for prediction')
 in_group.add_argument('--dir', type=str, help='Directory with images for prediction')
 in_group.add_argument('--csv', type=str, help='CSV file with images')
+parser.add_argument('--resample', nargs="+", type=int, default=None, help='Size to resample')
 parser.add_argument('--csv_column', type=str, default='image', help='CSV column name (Only used if flag csv is used)')
 parser.add_argument('--csv_root_path', type=str, default='', help='Replaces a root path directory to empty, this is use to recreate a directory structure in the output directory, otherwise, the output name will be the name in the csv (only if csv flag is used)')
 
 parser.add_argument('--model', help='Directory of saved model format')
-parser.add_argument('--class_prediction', help='If the model does class prediction', default=False)
+parser.add_argument('--prediction_type', help='Type of prediction. img, class, seg', default="img")
 
 parser.add_argument('--out', type=str, help='Output image, csv, or directory. If --dir flag is used the output image name will be the <Directory set in out flag>/<image filename in directory dir>', default="out")
 parser.add_argument('--out_ext', type=str, help='Output extension for images', default='.nrrd')
@@ -35,7 +37,7 @@ args = parser.parse_args()
 saved_model_path = args.model
 out_name = args.out
 out_ext = args.out_ext
-class_prediction = args.class_prediction
+prediction_type = args.prediction_type
 
 filenames = []
 
@@ -55,7 +57,7 @@ else:
     normpath = os.path.normpath("/".join([args.dir, '**', '*']))
     for img in glob.iglob(normpath, recursive=True):
       if os.path.isfile(img) and True in [ext in img for ext in [".nrrd", ".nii", ".nii.gz", ".mhd", ".dcm", ".DCM", ".jpg", ".png"]]:
-        image_filenames.append(img)
+        image_filenames.append(os.path.realpath(img))
   elif(args.csv):
     replace_dir_name = args.csv_root_path
     with open(args.csv) as csvfile:
@@ -66,7 +68,7 @@ else:
   for img in image_filenames:
       fobj = {}
       fobj["img"] = img
-      if(not class_prediction):
+      if(prediction_type == "img" or prediction_type == "seg"):
         image_dir_filename = img.replace(replace_dir_name, '')
         if(out_ext):
           image_dir_filename = os.path.splitext(image_dir_filename)[0] +  out_ext
@@ -85,10 +87,14 @@ else:
 
 def image_read(filename):
 
+  print("Reading:", filename)
   ImageType = itk.VectorImage[itk.F, 2]
   img_read = itk.ImageFileReader[ImageType].New(FileName=filename)
   img_read.Update()
   img = img_read.GetOutput()
+
+  if(args.resample):
+    img = resample.Resample(filename, args.resample, 1, 1, 2, img.GetNumberOfComponentsPerPixel())
   
   img_np = itk.GetArrayViewFromImage(img).astype(float)
 
@@ -175,7 +181,19 @@ if(int(tf.__version__.split('.')[0]) > 1):
       
       prediction = model.predict(np.reshape(img_np, tf_img_shape))
       prediction = np.array(prediction[0])
-      image_save(img_obj, prediction)
+      if(prediction_type == "img" or prediction_type == "seg"):
+        image_save(img_obj, prediction)
+      elif(prediction_type == "class"):
+        print("prediction", prediction)
+        img_obj["prediction"] = prediction.tolist()
+
+  if(prediction_type == "class"):
+    print("Writing:", args.out)
+    with open(args.out, "w") as f:
+      writer = csv.DictWriter(f, fieldnames=["img", "prediction"])
+      writer.writeheader()
+      for img_obj in filenames:
+        writer.writerow(img_obj)
 
 else:
   with tf.Session() as sess:
