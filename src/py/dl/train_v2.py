@@ -1,7 +1,4 @@
-
-from __future__ import print_function
 import numpy as np
-import tensorflow as tf
 import argparse
 import importlib
 import os
@@ -10,6 +7,7 @@ import json
 import glob
 from tf_inputs_v2 import *
 import time
+import tensorflow as tf
 
 print("Tensorflow version:", tf.__version__)
 
@@ -104,6 +102,9 @@ if(in_model):
 if(save_model):
 	print("Saving model to:", save_model)
 	nn.save_model(save_model)
+	with open(args.json, "r") as r:
+		with open(os.path.join(save_model, "data_description.json"), "w") as w:
+			w.write(json.dumps(json.load(r)))
 else:
 	summary_writer = tf.summary.create_file_writer(os.path.join(outvariablesdirname, modelname + "-" + str(datetime.now())))
 	checkpoint_path = os.path.join(outvariablesdirname, modelname)

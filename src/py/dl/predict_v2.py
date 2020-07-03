@@ -31,6 +31,7 @@ parser.add_argument('--out', type=str, help='Output image, csv, or directory. If
 parser.add_argument('--out_ext', type=str, help='Output extension for images', default='.nrrd')
 parser.add_argument('--out_basename', type=bool, default=False, help='Keeps only the filename for the output, i.e, does not create a directory structure for the output image filename')
 parser.add_argument('--ow', type=bool, help='Overwrite outputs', default=True)
+parser.add_argument('--tf1', type=bool, help='Enable tf1', default=False)
 
 args = parser.parse_args()
 
@@ -38,6 +39,21 @@ saved_model_path = args.model
 out_name = args.out
 out_ext = args.out_ext
 prediction_type = args.prediction_type
+
+data_description = None
+class_obj = None
+data_description_filename = os.path.join(saved_model_path, "data_description.json")
+if os.path.exists(data_description_filename):
+  with open(data_description_filename, "r") as f:
+    data_description = json.load(f)
+    print(data_description)
+    if "enumerate" in data_description:
+      prediction_type = "class"
+      class_obj = {}
+      enumerate_obj = data_description[data_description["enumerate"]]["class"]
+      for key in enumerate_obj:
+        class_obj[enumerate_obj[key]] = key 
+      print(class_obj)
 
 filenames = []
 
@@ -173,27 +189,56 @@ def image_save(img_obj, prediction):
 
 
 if(int(tf.__version__.split('.')[0]) > 1):
-  model = tf.keras.models.load_model(saved_model_path, custom_objects={'tf': tf})
-  model.summary()
+  if(args.tf1):
+    with tf.compat.v1.Session() as sess:
 
-  for img_obj in filenames:
-      img, img_np, tf_img_shape = image_read(img_obj["img"])
-      
-      prediction = model.predict(np.reshape(img_np, tf_img_shape))
-      prediction = np.array(prediction[0])
-      if(prediction_type == "img" or prediction_type == "seg"):
-        image_save(img_obj, prediction)
-      elif(prediction_type == "class"):
-        print("prediction", prediction)
-        img_obj["prediction"] = prediction.tolist()
+      loaded = tf.compat.v1.saved_model.load(sess=sess, tags=[tf.compat.v1.saved_model.SERVING], export_dir=saved_model_path)
 
-  if(prediction_type == "class"):
-    print("Writing:", args.out)
-    with open(args.out, "w") as f:
-      writer = csv.DictWriter(f, fieldnames=["img", "prediction"])
-      writer.writeheader()
       for img_obj in filenames:
-        writer.writerow(img_obj)
+        try:
+          img, img_np, tf_img_shape = image_read(img_obj["img"])
+
+          prediction = sess.run(
+              'output_y:0',
+              feed_dict={
+                  'input_x:0': np.reshape(img_np, tf_img_shape)
+              }
+          )
+
+          prediction = np.array(prediction[0])
+          image_save(img_obj, prediction)
+        except Exception as e:
+          print(e, file=sys.stderr)
+  else:
+    model = tf.keras.models.load_model(saved_model_path, custom_objects={'tf': tf})
+    model.summary()
+
+    for img_obj in filenames:
+        img, img_np, tf_img_shape = image_read(img_obj["img"])
+        
+        prediction = model.predict(np.reshape(img_np, tf_img_shape))
+        prediction = np.array(prediction[0])
+        if(prediction_type == "img" or prediction_type == "seg"):
+          image_save(img_obj, prediction)
+        elif(prediction_type == "class"):
+          img_obj["prediction"] = prediction.tolist()
+          if class_obj is not None:
+            argmax = np.argmax(prediction)
+            img_obj["class"] = class_obj[argmax]
+            print("prediction", prediction, "class", class_obj[argmax])
+          else:
+            print("prediction", prediction)
+
+    if(prediction_type == "class"):
+      print("Writing:", args.out)
+      with open(args.out, "w") as f:
+        fieldnames = ["img", "prediction"]
+        if class_obj is not None:
+          fieldnames = ["img", "prediction", "class"]
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        for img_obj in filenames:
+          writer.writerow(img_obj)
 
 else:
   with tf.Session() as sess:

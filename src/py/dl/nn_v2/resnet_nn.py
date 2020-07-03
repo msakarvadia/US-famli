@@ -4,6 +4,7 @@ import tensorflow as tf
 from tensorflow.keras import layers
 from tensorflow.keras import activations
 import os
+import json
 
 class ConvBlock(layers.Layer):
     def __init__(self, out_filters):
@@ -85,11 +86,18 @@ class IdentityBlock(layers.Layer):
 
 class NN(tf.keras.Model):
 
-    def __init__(self, tf_inputs, learning_rate = 1e-4, decay_steps = 10000, decay_rate = 0.96, staircase = 0, drop_prob = 0):
+    def __init__(self, tf_inputs, args):
         super(NN, self).__init__()
 
-        data_description = tf_inputs.get_data_description()
-        
+        learning_rate = args.learning_rate
+        decay_steps = args.decay_steps
+        decay_rate = args.decay_rate
+        staircase = args.staircase
+        drop_prob = args.drop_prob
+        sample_weight = args.sample_weight
+
+        self.data_description = tf_inputs.get_data_description()
+        data_description = self.data_description
         self.num_channels = data_description[data_description["data_keys"][1]]["shape"][-1]
 
         self.num_classes = 2
@@ -98,22 +106,23 @@ class NN(tf.keras.Model):
             print("Number of classes in data description", self.num_classes)
 
         self.resnet = self.make_resnet_model()
-        self.classification = self.make_classification_model()
-        
         self.resnet.summary()
-        self.classification.summary()
 
-        self.resnet_loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
+        # self.resnet_loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
+        self.resnet_loss = tf.keras.losses.CategoricalCrossentropy(from_logits=True)
 
         lr = tf.keras.optimizers.schedules.ExponentialDecay(learning_rate, decay_steps, decay_rate, staircase)
 
         self.optimizer = tf.keras.optimizers.Adam(lr)
 
+        self.metrics_acc = tf.keras.metrics.Accuracy()
+
     def make_resnet_model(self):
 
         model = tf.keras.Sequential()
 
-        model.add(layers.Conv2D(64, (1, 1), strides=(2, 2), input_shape=[512, 512, self.num_channels], use_bias=False, padding='same'))
+        model.add(layers.BatchNormalization(input_shape=[512, 512, self.num_channels]))
+        model.add(layers.Conv2D(64, (1, 1), strides=(2, 2), use_bias=False, padding='same'))
 
         model.add(ConvBlock([64,64,128]))
         model.add(IdentityBlock([64,64,128]))
@@ -140,13 +149,7 @@ class NN(tf.keras.Model):
         model.add(IdentityBlock([512,512,1024]))
         model.add(IdentityBlock([512,512,1024]))
 
-        return model
-
-    def make_classification_model(self):
-
-        model = tf.keras.Sequential()
-
-        model.add(layers.BatchNormalization(input_shape=(4, 4, 1024)))
+        model.add(layers.BatchNormalization())
         model.add(layers.LeakyReLU())
         model.add(layers.Reshape((4*4*1024,)))
         model.add(layers.Dense(self.num_classes, use_bias=False))
@@ -155,33 +158,53 @@ class NN(tf.keras.Model):
 
 
     @tf.function
-    def train_step(self, images):
-        labels = images[1]
-        images = images[0]/255
+    def train_step(self, train_tuple):
+        
+        images = train_tuple[0]/255
+        labels = train_tuple[1]
 
         with tf.GradientTape() as resnet_tape:
 
-            x_logits = self.classification(self.resnet(images))
+            x_logits = self.resnet(images)
 
+            labels = tf.one_hot(labels, self.num_classes, axis=1)
             loss = self.resnet_loss(labels, x_logits)
 
         gradients_of_resnet = resnet_tape.gradient(loss, self.trainable_variables)
 
         self.optimizer.apply_gradients(zip(gradients_of_resnet, self.trainable_variables))
 
-        return loss
+        return loss, x_logits
 
     def summary(self, images, tr_step, step):
 
-        images = images[0]
-        loss = tr_step
+
+        imgs = images[0]
+        labels = tf.reshape(images[1], -1)
+
+        loss = tr_step[0]
+        prediction = tf.argmax(tf.nn.softmax(tr_step[1]), axis=1)
+
+        self.metrics_acc.update_state(labels, prediction)
+        acc_result = self.metrics_acc.result()
 
         tf.summary.scalar("loss", loss, step=step)
-        tf.summary.image('images', images/255., step=step)
+        tf.summary.image('images', imgs/255., step=step)
+        tf.summary.scalar('accuracy', acc_result, step=step)
 
-        print(step, "loss", loss.numpy())
+        print(step, "loss", loss.numpy(), "acc", acc_result.numpy(), labels.numpy(), prediction.numpy())
 
     def get_checkpoint_manager(self):
         return tf.train.Checkpoint(resnet=self.resnet,
-            classification=self.classification,
             optimizer=self.optimizer)
+
+    def save_model(self, save_model):
+        model = tf.keras.Sequential([layers.Lambda(lambda x: x/255, input_shape=(512, 512, self.num_channels))] + self.resnet.layers)
+        model.add(layers.Softmax())
+        model.summary()
+        model.save(save_model)
+
+        # model = tf.keras.Sequential(self.classifier.layers)
+        # model.add(layers.Softmax())
+        # model.summary()
+        # model.save(save_model)

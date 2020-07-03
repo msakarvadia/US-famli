@@ -27,11 +27,13 @@ class NN(tf.keras.Model):
 
         self.drop_prob = drop_prob
         
+        self.gaussian_noise = tf.keras.layers.GaussianNoise(0.01)
         self.classifier = self.make_classification_model()
-        self.classification_loss = tf.keras.losses.CategoricalCrossentropy(from_logits=True, label_smoothing=0.1)
+        self.classification_loss = tf.keras.losses.CategoricalCrossentropy(from_logits=True)
+        # self.classification_loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
         self.sample_weight = None
         if(sample_weight is not None):
-            self.sample_weight = tf.constant(np.reshape(np.multiply(np.ones([args.batch_size, self.num_classes]), sample_weight), [args.batch_size, self.num_classes, 1]), dtype=tf.float32)
+            self.sample_weight = tf.constant(np.reshape(np.multiply(np.ones([args.batch_size, self.num_classes]), sample_weight), (args.batch_size, 1)), dtype=tf.float32)
             print("Weights:", self.sample_weight.numpy())
             
         self.metrics_acc = tf.keras.metrics.Accuracy()
@@ -52,7 +54,10 @@ class NN(tf.keras.Model):
 
         model = tf.keras.Sequential()
 
-        model.add(layers.Reshape((4096,), input_shape=(1, 1, 4096)))
+        # model.add(layers.Reshape((4096,), input_shape=(1, 1, 4096)))
+        model.add(layers.Reshape((1024,), input_shape=(1, 1024)))
+        model.add(layers.BatchNormalization())
+        model.add(layers.Dense(4*4*1024))
         model.add(layers.LeakyReLU())
         model.add(layers.Dense(self.num_classes, use_bias=False))
 
@@ -61,13 +66,16 @@ class NN(tf.keras.Model):
     @tf.function
     def train_step(self, train_tuple):
         
-        images = train_tuple[0]/255
+        # images = train_tuple[0]/255
+        images = train_tuple[0]
         labels = train_tuple[1]
 
         with tf.GradientTape() as tape:
             
-            x_c = self.classifier(self.encoder(images))
-            loss = self.classification_loss(tf.one_hot(labels, self.num_classes, axis=1), x_c, sample_weight=self.sample_weight)
+            # x_c = self.classifier(self.encoder(self.gaussian_noise(images)))
+            x_c = self.classifier(images)
+            labels = tf.one_hot(labels, self.num_classes, axis=1)
+            loss = self.classification_loss(labels, x_c, sample_weight=self.sample_weight)
 
             var_list = self.trainable_variables
 
@@ -82,9 +90,16 @@ class NN(tf.keras.Model):
         model.summary()
         model.save(save_model)
 
+        # model = tf.keras.Sequential(self.classifier.layers)
+        # model.add(layers.Softmax())
+        # model.summary()
+        # model.save(save_model)
+
+        
+
     def get_checkpoint_manager(self):
         return tf.train.Checkpoint(
-            encoder=self.encoder,
+            # encoder=self.encoder,
             classifier=self.classifier,
             optimizer=self.optimizer)
 
@@ -97,5 +112,6 @@ class NN(tf.keras.Model):
         acc_result = self.metrics_acc.result()
 
         print("step", step, "loss", loss.numpy(), "acc", acc_result.numpy(), labels.numpy(), prediction.numpy())
-        tf.summary.image('real', images[0]/255, step=step)
+        # tf.summary.image('real', images[0]/255, step=step)
+        tf.summary.scalar('loss', loss, step=step)
         tf.summary.scalar('accuracy', acc_result, step=step)

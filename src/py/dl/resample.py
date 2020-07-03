@@ -2,6 +2,7 @@ import itk
 import numpy as np
 import argparse
 import os
+import glob
 
 def Resample(img_filename, output_size, fit_spacing = False, iso_spacing = False, img_dimension = 2, pixel_dimension = 1):
 
@@ -13,11 +14,16 @@ def Resample(img_filename, output_size, fit_spacing = False, iso_spacing = False
 		PixelType = itk.Vector[itk.F, pixel_dimension]
 		VectorImageType = itk.Image[PixelType, img_dimension]
 
+	print("Reading:", img_filename)
 	img_read = itk.ImageFileReader[VectorImageType].New(FileName=img_filename)
 	img_read.Update()
 	img = img_read.GetOutput()
 
-	InterpolatorType = itk.LinearInterpolateImageFunction[VectorImageType, itk.D]
+	if args.linear:
+		InterpolatorType = itk.LinearInterpolateImageFunction[VectorImageType, itk.D]
+	else:
+		InterpolatorType = itk.NearestNeighborInterpolateImageFunction[VectorImageType, itk.D]
+
 	ResampleType = itk.ResampleImageFilter[VectorImageType, VectorImageType]
 
 	spacing = img.GetSpacing()
@@ -57,6 +63,7 @@ if __name__ == "__main__":
 	in_group.add_argument('--dir', type=str, help='Directory with image to resample')
 
 	parser.add_argument('--size', nargs="+", type=int, help='Output size', required=True)
+	parser.add_argument('--linear', type=bool, help='Use linear interpolation.', default=False)
 	parser.add_argument('--fit_spacing', type=bool, help='Fit spacing to output', default=False)
 	parser.add_argument('--iso_spacing', type=bool, help='Same spacing for resampled output', default=False)
 	parser.add_argument('--dimension', type=int, help='Image dimension', default=2)
@@ -72,12 +79,13 @@ if __name__ == "__main__":
 		fobj["out"] = args.out
 		filenames.append(fobj)
 	elif(args.dir):
+		out_dir = args.out
 		normpath = os.path.normpath("/".join([args.dir, '**', '*']))
 		for img in glob.iglob(normpath, recursive=True):
 			if os.path.isfile(img) and True in [ext in img for ext in [".nrrd", ".nii", ".nii.gz", ".mhd", ".dcm", ".DCM", ".jpg", ".png"]]:
 				fobj = {}
 				fobj["img"] = img
-				fobj["out"] = os.path.normpath(os.path.join(args.out, img.replace(args.dir, '')))
+				fobj["out"] = os.path.normpath(out_dir + "/" + img.replace(args.dir, ''))
 				if not os.path.exists(os.path.dirname(fobj["out"])):
 					os.makedirs(os.path.dirname(fobj["out"]))
 				filenames.append(fobj)
@@ -88,6 +96,7 @@ if __name__ == "__main__":
 
 		img = Resample(fobj["img"], args.size, args.fit_spacing, args.iso_spacing, args.dimension, args.pixel_dimension)
 
+		print("Writing:", fobj["out"])
 		WriterType = itk.ImageFileWriter[img]
 		writer = WriterType.New()
 		writer.SetInput(img)

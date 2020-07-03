@@ -4,192 +4,125 @@ import os
 import numpy as np
 import uuid
 import sys
-import csv
-import json
+
+def image_save(img_obj, prediction):
+  PixelDimension = prediction.shape[-1]
+  Dimension = 2
+  
+  if(PixelDimension < 7):
+    if(PixelDimension >= 3 and os.path.splitext(img_obj["out"])[1] not in ['.jpg', '.png']):
+      ComponentType = itk.ctype('float')
+      PixelType = itk.Vector[ComponentType, PixelDimension]
+    elif(PixelDimension == 3):
+      PixelType = itk.RGBPixel.UC
+      prediction = np.absolute(prediction)
+      prediction = np.around(prediction).astype(np.uint16)
+    else:
+      PixelType = itk.ctype('float')
+
+    OutputImageType = itk.Image[PixelType, Dimension]
+    out_img = OutputImageType.New()
+
+  else:
+
+    ComponentType = itk.ctype('float')
+    OutputImageType = itk.VectorImage[ComponentType, Dimension]
+
+    out_img = OutputImageType.New()
+    out_img.SetNumberOfComponentsPerPixel(PixelDimension)
+    
+  size = itk.Size[Dimension]()
+  size.Fill(1)
+  prediction_shape = list(prediction.shape[0:-1])
+  prediction_shape.reverse()
+
+  for i, s in enumerate(prediction_shape):
+    size[i] = s
+
+  index = itk.Index[Dimension]()
+  index.Fill(0)
+
+  RegionType = itk.ImageRegion[Dimension]
+  region = RegionType()
+  region.SetIndex(index)
+  region.SetSize(size)
+  
+  # out_img.SetRegions(img.GetLargestPossibleRegion())
+  out_img.SetRegions(region)
+  out_img.SetDirection(img.GetDirection())
+  out_img.SetOrigin(img.GetOrigin())
+  out_img.SetSpacing(img.GetSpacing())
+  out_img.Allocate()
+
+  out_img_np = itk.GetArrayViewFromImage(out_img)
+  out_img_np.setfield(np.reshape(prediction, out_img_np.shape), out_img_np.dtype)
+
+  print("Writing:", img_obj["out"])
+  writer = itk.ImageFileWriter.New(FileName=img_obj["out"], Input=out_img)
+  writer.UseCompressionOn()
+  writer.Update()
 
 def main(args):
+	img = itk.imread(args.img)
+	img_np = itk.GetArrayViewFromImage(img).astype(float)
+	num_splits = img_np.shape[args.axis]
+	img_np_split = np.split(img_np, num_splits, axis=args.axis)
+
+	out_shape = np.delete(np.shape(img_np), args.axis)
+
+	PixelType = itk.template(img)[1][0]
+	Dimension = 2
+	PixelDimension = img.GetNumberOfComponentsPerPixel()
 	
-	if(args.json):
-		imgs_arr = []
+	Origin = np.delete(np.array(img.GetOrigin())[::-1], args.axis)
+	Spacing = np.delete(np.array(img.GetSpacing())[::-1], args.axis)
 
-		for img_index, img_filename in enumerate(args.img):
-			img_read = itk.ImageFileReader.New(FileName=img_filename)
-			img_read.Update()
-			img = img_read.GetOutput()
-			imgs_arr.append(img)
+	index = itk.Index[Dimension]()
+	index.Fill(0)
 
-		description_arr = []
-		with open(args.json, "r") as jsf:
-			description_arr = json.load(jsf)
+	size = itk.Size[Dimension]()
+	size.Fill(1)
+	for i, s in enumerate(np.copy(out_shape)[::-1]):
+		size[i] = int(s)
 
-		for img in imgs_arr:
+	RegionType = itk.ImageRegion[Dimension]
+	Region = RegionType()
+	Region.SetIndex(index)
+	Region.SetSize(size)
 
-			img_np = itk.GetArrayViewFromImage(img)
+	OutputImageType = itk.VectorImage[PixelType, 2]
 
-			for img_index in range(img_np.shape[0]):
+	if PixelDimension > 1:
+		np.append(out_shape, PixelDimension)
 
-				description = description_arr[img_index]
+	for i, slice_np in enumerate(img_np_split):
+		# print(np.reshape(slice_np, out_shape).shape)
+		out_img = OutputImageType.New()
+		out_img.SetNumberOfComponentsPerPixel(PixelDimension)
+		out_img.SetOrigin(Origin)
+		out_img.SetSpacing(Spacing)
+		out_img.SetRegions(Region)
+		out_img.Allocate()
 
-				RegionType = itk.ImageRegion[2]
-				region = RegionType()
-				region.SetIndex(description["image"]["region"]["index"])
-				region.SetSize(description["image"]["region"]["size"])
+		out_img_np = itk.GetArrayViewFromImage(out_img)
+		out_img_np.setfield(np.reshape(slice_np, out_shape), out_img_np.dtype)
 
-				PixelType = itk.template(img)[1][0]
-				OutputImageType = itk.Image[PixelType, 2]
-				
-				out_img = OutputImageType.New()
-				out_img.SetRegions(region)
-				out_img.SetOrigin(description["image"]["origin"])
-				out_img.SetSpacing(description["image"]["spacing"])
-				
-				np_dir_vnl = itk.GetVnlMatrixFromArray(np.array(description["image"]["direction"]))
-				direction = out_img.GetDirection()
-				direction.GetVnlMatrix().copy_in(np_dir_vnl.data_block())
+		out_name = os.path.join(args.out, args.prefix + str(i) + args.ext)
+		print("Writing:", out_name)
+		writer = itk.ImageFileWriter.New(FileName=out_name, Input=out_img)
+		writer.UseCompressionOn()
+		writer.Update()
 
-				out_img.Allocate()
-
-				out_img_np = itk.GetArrayViewFromImage(out_img)
-
-				out_img_np.setfield(img_np[img_index], out_img_np.dtype)
-
-				if(not os.path.exists(args.out) or not os.path.isdir(args.out)):
-					os.makedirs(args.out)
-
-				out_filename = os.path.join(args.out, description["img_filename"])
-				print("Writing:", out_filename)
-				writer = itk.ImageFileWriter.New(FileName=out_filename, Input=out_img)
-				writer.Update()
-
-	else:
-		imgs_arr = []
-		imgs_arr_description = []
-		
-		csv_headers = []
-		if args.out_csv_headers:
-			csv_headers = args.out_csv_headers
-		
-		for img_index, img_filename in enumerate(args.img):
-			img_read = itk.ImageFileReader.New(FileName=img_filename)
-			img_read.Update()
-			img = img_read.GetOutput()
-			imgs_arr.append(img)
-
-			if args.out_csv_headers is None:
-				csv_headers.append(img_index)
-
-			img_obj_description = {}
-			img_obj_description["image"] = {}
-			img_obj_description["image"]["region"] = {}
-			img_obj_description["image"]["region"]["size"] = np.array(img.GetLargestPossibleRegion().GetSize()).tolist()
-			img_obj_description["image"]["region"]["index"] = np.array(img.GetLargestPossibleRegion().GetIndex()).tolist()
-			img_obj_description["image"]["spacing"] = np.array(img.GetSpacing()).tolist()
-			img_obj_description["image"]["origin"] = np.array(img.GetOrigin()).tolist() 
-			img_obj_description["image"]["direction"] = itk.GetArrayFromVnlMatrix(img.GetDirection().GetVnlMatrix().as_matrix()).tolist()
-			img_obj_description["img_index"] = img_index
-			img_obj_description["img_filename"] = img_filename
-			img_obj_description["slice"] = {}
-
-			imgs_arr_description.append(img_obj_description)
-
-		if len(args.img) != len(csv_headers):
-			print("The csv headers  provided do not have the same length as the number of images provided", file=sys.stderr)
-			sys.exit(1)
-		
-		if len(imgs_arr) == 0:
-			print("You need to provide at least one image!", file=sys.stderr)
-			sys.exit(1)
-						
-
-		print(imgs_arr_description)
-		img_np = itk.GetArrayViewFromImage(imgs_arr[0])
-		img_shape_max = np.max(img_np.shape)
-		out_size = np.array([img_shape_max, img_shape_max]).tolist()
-		
-		PixelType = itk.template(imgs_arr[0])[1][0]
-		OutputImageType = itk.Image[PixelType, 2]
-
-		out_csv_rows = []
-
-		if imgs_arr[0].GetImageDimension() == 3:
-			img_shape = img_np.shape
-			for dim in range(imgs_arr[0].GetImageDimension()):
-				
-				imgs_arr_description[img_index]["slice"][dim] = []
-
-				for sln in range(img_shape[dim]):
-
-					start = [0,0,0]
-					end = [None,None,None]
-					start[dim] = sln
-					end[dim] = sln + 1
-					uuid_out_name = str(uuid.uuid4())
-
-					out_obj_csv = {}
-
-					for img_index, img in enumerate(imgs_arr):
-
-						img_np = itk.GetArrayViewFromImage(img)
-						
-						img_np_2d = np.squeeze(img_np[start[0]:end[0],start[1]:end[1],start[2]:end[2]], axis=dim)
-						size_np = img_np_2d.shape
-
-						img_np_2d_max_size = np.zeros(out_size)
-						img_np_2d_max_size[0:size_np[0],0:size_np[1]] = img_np_2d
-
-						index = itk.Index[2]()
-						index.Fill(0)
-
-						RegionType = itk.ImageRegion[2]
-						region = RegionType()
-						region.SetIndex(index)
-						region.SetSize(out_size)
-
-						out_img = OutputImageType.New()
-						out_img.SetRegions(region)
-						out_img.SetOrigin(np.delete(img.GetOrigin(),dim).tolist())
-						out_img.SetSpacing(np.delete(img.GetSpacing(),dim).tolist())
-						out_img.Allocate()
-
-						out_img_np = itk.GetArrayViewFromImage(out_img)
-
-						out_img_np.setfield(img_np_2d_max_size, out_img_np.dtype)
-			
-						out_dir = os.path.join(args.out, str(csv_headers[img_index]))
-
-						if(not os.path.exists(out_dir) or not os.path.isdir(out_dir)):
-							os.makedirs(out_dir)
-
-						out_filename = os.path.join(out_dir, uuid_out_name + ".nrrd")
-						print("Writing:", out_filename)
-						writer = itk.ImageFileWriter.New(FileName=out_filename, Input=out_img)
-						writer.Update()
-						
-						out_obj_csv[csv_headers[img_index]] = out_filename
-
-						imgs_arr_description[img_index]["slice"][dim].append(out_filename)
-
-					out_csv_rows.append(out_obj_csv)
-
-			with open(args.out_csv, "w") as f:
-				writer = csv.DictWriter(f, fieldnames=csv_headers)
-				writer.writeheader()
-				for row in out_csv_rows:
-					writer.writerow(row)
-
-			if(args.json_desc):
-				with open(args.json_desc, "w") as f:
-					f.write(json.dumps(imgs_arr_description))
+	
 
 
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser()
-	parser.add_argument('--img', nargs="+", type=str, help='Input image', required=True)
-	parser.add_argument('--json', type=str, help='Input JSON file created by nrrd2D_3D', default=None)
-	parser.add_argument('--out_csv', type=str, help='Output csv filename', default="out.csv")
-	parser.add_argument('--out_csv_headers', nargs="+", type=str, help='Output csv headers', default=None)
+	parser.add_argument('--img', type=str, help='Input image', required=True)
 	parser.add_argument('--out', type=str, help='Output directory', default="./")
-	parser.add_argument('--json_desc', type=str, help='Output json description for each image', default=None)
+	parser.add_argument('--prefix', type=str, help='Output prefix', default="frame_")
+	parser.add_argument('--ext', type=str, help='Output img extension', default=".nrrd")
+	parser.add_argument('--axis', type=int, help='Split index', default=0)
 
 	args = parser.parse_args()
 
