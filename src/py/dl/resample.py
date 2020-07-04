@@ -69,6 +69,7 @@ if __name__ == "__main__":
 	parser.add_argument('--dimension', type=int, help='Image dimension', default=2)
 	parser.add_argument('--pixel_dimension', type=int, help='Pixel dimension', default=1)
 	parser.add_argument('--out', type=str, help='Output image/directory', default="./out.nrrd")
+	parser.add_argument('--out_ext', type=str, help='Output extension type', default=None)
 
 	args = parser.parse_args()
 
@@ -86,6 +87,8 @@ if __name__ == "__main__":
 				fobj = {}
 				fobj["img"] = img
 				fobj["out"] = os.path.normpath(out_dir + "/" + img.replace(args.dir, ''))
+				if args.out_ext is not None:
+					fobj["out"] = os.path.splitext(fobj["out"])[0] + args.out_ext
 				if not os.path.exists(os.path.dirname(fobj["out"])):
 					os.makedirs(os.path.dirname(fobj["out"]))
 				filenames.append(fobj)
