@@ -26,6 +26,7 @@ parser.add_argument('--csv_root_path', type=str, default='', help='Replaces a ro
 
 parser.add_argument('--model', help='Directory of saved model format')
 parser.add_argument('--prediction_type', help='Type of prediction. img, class, seg', default="img")
+parser.add_argument('--imageDimension', type=int, help='Image dimension', default=2)
 
 parser.add_argument('--out', type=str, help='Output image, csv, or directory. If --dir flag is used the output image name will be the <Directory set in out flag>/<image filename in directory dir>', default="out")
 parser.add_argument('--out_ext', type=str, help='Output extension for images', default='.nrrd')
@@ -39,6 +40,7 @@ saved_model_path = args.model
 out_name = args.out
 out_ext = args.out_ext
 prediction_type = args.prediction_type
+tf1 = args.tf1
 
 data_description = None
 class_obj = None
@@ -54,6 +56,9 @@ if os.path.exists(data_description_filename):
       for key in enumerate_obj:
         class_obj[enumerate_obj[key]] = key 
       print(class_obj)
+    if "tf1" in data_description and data_description["tf1"]:
+      tf1 = True
+
 
 filenames = []
 
@@ -104,7 +109,7 @@ else:
 def image_read(filename):
 
   print("Reading:", filename)
-  ImageType = itk.VectorImage[itk.F, 2]
+  ImageType = itk.VectorImage[itk.F, args.imageDimension]
   img_read = itk.ImageFileReader[ImageType].New(FileName=filename)
   img_read.Update()
   img = img_read.GetOutput()
@@ -189,7 +194,7 @@ def image_save(img_obj, prediction):
 
 
 if(int(tf.__version__.split('.')[0]) > 1):
-  if(args.tf1):
+  if(tf1):
     with tf.compat.v1.Session() as sess:
 
       loaded = tf.compat.v1.saved_model.load(sess=sess, tags=[tf.compat.v1.saved_model.SERVING], export_dir=saved_model_path)
@@ -206,7 +211,16 @@ if(int(tf.__version__.split('.')[0]) > 1):
           )
 
           prediction = np.array(prediction[0])
-          image_save(img_obj, prediction)
+          if(prediction_type == "img" or prediction_type == "seg"):
+            image_save(img_obj, prediction)
+          elif(prediction_type == "class"):
+            img_obj["prediction"] = prediction.tolist()
+            if class_obj is not None:
+              argmax = np.argmax(prediction)
+              img_obj["class"] = class_obj[argmax]
+              print("prediction", prediction, "class", class_obj[argmax])
+            else:
+              print("prediction", prediction)
         except Exception as e:
           print(e, file=sys.stderr)
   else:

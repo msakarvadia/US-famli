@@ -98,12 +98,22 @@ class NN(tf.keras.Model):
 
         self.data_description = tf_inputs.get_data_description()
         data_description = self.data_description
-        self.num_channels = data_description[data_description["data_keys"][1]]["shape"][-1]
+        self.num_channels = data_description[data_description["data_keys"][0]]["shape"][-1]
 
         self.num_classes = 2
-        if(data_description[data_description["data_keys"][1]]["num_class"]):
-            self.num_classes = data_description[data_description["data_keys"][1]]["num_class"]
-            print("Number of classes in data description", self.num_classes)
+        self.class_weights_index = -1
+        self.enumerate_index = 1
+
+
+        if "enumerate" in data_description:
+            self.enumerate_index = data_description["data_keys"].index(data_description["enumerate"])
+
+            if(data_description[data_description["data_keys"][self.enumerate_index]]["num_class"]):
+                self.num_classes = data_description[data_description["data_keys"][self.enumerate_index]]["num_class"]
+                print("Number of classes in data description", self.num_classes)
+                if "class_weights" in data_description["data_keys"]:
+                    self.class_weights_index = data_description["data_keys"].index("class_weights")
+                    print("Using weights index", self.class_weights_index)
 
         self.resnet = self.make_resnet_model()
         self.resnet.summary()
@@ -148,9 +158,7 @@ class NN(tf.keras.Model):
         model.add(IdentityBlock([512,512,1024]))
         model.add(IdentityBlock([512,512,1024]))
         model.add(IdentityBlock([512,512,1024]))
-
-        model.add(layers.BatchNormalization())
-        model.add(layers.LeakyReLU())
+        
         model.add(layers.Reshape((4*4*1024,)))
         model.add(layers.Dense(self.num_classes, use_bias=False))
 
@@ -160,15 +168,19 @@ class NN(tf.keras.Model):
     @tf.function
     def train_step(self, train_tuple):
         
-        images = train_tuple[0]/255
-        labels = train_tuple[1]
+        images = train_tuple[1]/255
+        labels = train_tuple[self.enumerate_index]
+        sample_weight = None
+
+        if self.class_weights_index != -1:
+            sample_weight = train_tuple[self.class_weights_index]
 
         with tf.GradientTape() as resnet_tape:
 
             x_logits = self.resnet(images)
 
             labels = tf.one_hot(labels, self.num_classes, axis=1)
-            loss = self.resnet_loss(labels, x_logits)
+            loss = self.resnet_loss(labels, x_logits, sample_weight=sample_weight)
 
         gradients_of_resnet = resnet_tape.gradient(loss, self.trainable_variables)
 
@@ -179,8 +191,8 @@ class NN(tf.keras.Model):
     def summary(self, images, tr_step, step):
 
 
-        imgs = images[0]
-        labels = tf.reshape(images[1], -1)
+        imgs = images[1]
+        labels = tf.reshape(images[self.enumerate_index], -1)
 
         loss = tr_step[0]
         prediction = tf.argmax(tf.nn.softmax(tr_step[1]), axis=1)
@@ -192,7 +204,11 @@ class NN(tf.keras.Model):
         tf.summary.image('images', imgs/255., step=step)
         tf.summary.scalar('accuracy', acc_result, step=step)
 
-        print(step, "loss", loss.numpy(), "acc", acc_result.numpy(), labels.numpy(), prediction.numpy())
+        sample_weight = np.ones_like(labels.numpy())
+        if self.class_weights_index != -1:
+            sample_weight = np.reshape(images[self.class_weights_index].numpy(), -1)
+
+        print(step, "loss", loss.numpy(), "acc", acc_result.numpy(), labels.numpy(), prediction.numpy(), sample_weight)
 
     def get_checkpoint_manager(self):
         return tf.train.Checkpoint(resnet=self.resnet,

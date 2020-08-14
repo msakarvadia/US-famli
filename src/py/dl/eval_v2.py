@@ -61,31 +61,31 @@ abs_diff_arr = []
 mse_arr = []
 
 for image_batch in dataset:
-	y_pred = model.predict(image_batch[0])
+  y_pred = model.predict(image_batch[0])
 
-	if(eval_type == "class"):
-		y_pred = np.argmax(np.array(y_pred), axis=1)
-		y_pred_arr.extend(y_pred)
-		y_true_arr.extend(np.reshape(image_batch[1], -1).tolist())
-	elif(eval_type == "segmentation"):
-		fpr, tpr, _ = roc_curve(np.array(image_batch[1]).reshape(-1), np.array(y_pred).reshape(-1), pos_label=1)
-		roc_auc = auc(fpr,tpr)
+  if(eval_type == "class"):
+    y_pred = np.argmax(np.array(y_pred), axis=1)
+    y_pred_arr.extend(y_pred)
+    y_true_arr.extend(np.reshape(image_batch[1], -1).tolist())
+  elif(eval_type == "segmentation"):
+    fpr, tpr, _ = roc_curve(np.array(image_batch[1]).reshape(-1), np.array(y_pred).reshape(-1), pos_label=1)
+    roc_auc = auc(fpr,tpr)
 
-		fpr_arr.append(fpr)
-		tpr_arr.append(tpr)
-		roc_auc_arr.append(roc_auc)
+    fpr_arr.append(fpr)
+    tpr_arr.append(tpr)
+    roc_auc_arr.append(roc_auc)
 
-		y_pred_flat = np.array(y_pred).reshape((len(y_pred), -1))
-		labels_flat = np.array(image_batch[1]).reshape((len(y_pred), -1))
+    y_pred_flat = np.array(y_pred).reshape((len(y_pred), -1))
+    labels_flat = np.array(image_batch[1]).reshape((len(y_pred), -1))
 
-		for i in range(len(y_pred)):
-			intersection = 2.0 * np.sum(y_pred_flat[i] * labels_flat[i]) + 1e-7
-			union = np.sum(y_pred_flat[i]) + np.sum(labels_flat[i]) + 1e-7
-			iou_arr.append(intersection/union)
+    for i in range(len(y_pred)):
+      intersection = 2.0 * np.sum(y_pred_flat[i] * labels_flat[i]) + 1e-7
+      union = np.sum(y_pred_flat[i]) + np.sum(labels_flat[i]) + 1e-7
+      iou_arr.append(intersection/union)
 
-	elif(eval_type == "image"):
-		abs_diff_arr.extend(np.average(np.absolute(y_pred - image_batch[1]).reshape([batch_size, -1]), axis=-1))
-		mse_arr.extend(np.average(np.square(y_pred - image_batch[1]).reshape([batch_size, -1]), axis=-1))
+  elif(eval_type == "image" or eval_type == "numeric"):
+    abs_diff_arr.extend(np.average(np.absolute(y_pred - image_batch[1]).reshape([1, -1]), axis=-1))
+    mse_arr.extend(np.average(np.square(y_pred - image_batch[1]).reshape([1, -1]), axis=-1))
 
 
 def plot_confusion_matrix(cm, classes,
@@ -203,14 +203,21 @@ elif(eval_type == "segmentation"):
   iou_filename = os.path.splitext(json_tf_records)[0] + "_iou.png"
   iou_fig.savefig(iou_filename)
 
-elif(eval_type == "image"):
+elif(eval_type == "image" or eval_type == "numeric"):
   abs_diff_arr = np.array(abs_diff_arr)
   abs_diff_fig = plt.figure()
   x_samples = np.arange(len(abs_diff_arr))
+
   plt.scatter(x_samples, abs_diff_arr, c=abs_diff_arr, cmap='cool', alpha=0.75, label='Mean absolute error')
   plt.xlabel('Samples')
   plt.ylabel('Absolute error')
   plt.title('Mean absolute error')
+  
+  abs_diff_mean = np.array([np.mean(abs_diff_arr)]*len(abs_diff_arr))
+  mean_line = plt.plot(x_samples,abs_diff_mean, label='Mean', linestyle='--')
+  abs_diff_stdev = np.array([np.std(abs_diff_mean)]*len(abs_diff_mean))
+  stdev_line = plt.plot(x_samples, abs_diff_mean + abs_diff_stdev, label='Mean', linestyle=':', alpha=0.75)
+  plt.text(len(abs_diff_mean), np.mean(abs_diff_mean), "{0:.3f}".format(np.mean(abs_diff_mean)))
 
   abs_filename = os.path.splitext(json_tf_records)[0] + "_abs_diff.png"
   abs_diff_fig.savefig(abs_filename)
@@ -222,5 +229,13 @@ elif(eval_type == "image"):
   plt.ylabel('MSE')
   plt.title('Mean squared error')
 
+  mse_mean = np.array([np.mean(mse_arr)]*len(mse_arr))
+  mse_line = plt.plot(x_samples,mse_mean, label='Mean', linestyle='--')
+  mse_stdev = np.array([np.std(mse_arr)]*len(mse_arr))
+  stdev_line = plt.plot(x_samples, mse_mean + mse_stdev, label='Mean', linestyle=':', alpha=0.75)
+  plt.text(len(mse_mean), np.mean(mse_mean), "{0:.3f}".format(np.mean(mse_mean)))
+
   mse_filename = os.path.splitext(json_tf_records)[0] + "_mse.png"
   mse_fig.savefig(mse_filename)
+
+  print("mae:", abs_diff_mean[0], "mse:", mse_mean[0])

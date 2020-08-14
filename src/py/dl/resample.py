@@ -4,14 +4,26 @@ import argparse
 import os
 import glob
 
-def Resample(img_filename, output_size, fit_spacing = False, iso_spacing = False, img_dimension = 2, pixel_dimension = 1):
+def Resample(img_filename, args):
+
+	output_size = args.size 
+	fit_spacing = args.fit_spacing
+	iso_spacing = args.iso_spacing
+	img_dimension = args.dimension
+	pixel_dimension = args.pixel_dimension
 
 	if(pixel_dimension == 1):
 		zeroPixel = 0
 		VectorImageType = itk.Image[itk.F, img_dimension]
 	else:
 		zeroPixel = np.zeros(pixel_dimension)
-		PixelType = itk.Vector[itk.F, pixel_dimension]
+		if(args.rgb):
+			if(pixel_dimension == 3):
+				PixelType = itk.RGBPixel[itk.UC]
+			else:
+				PixelType = itk.itk.RGBAPixel[itk.UC]
+		else:
+			PixelType = itk.Vector[itk.F, pixel_dimension]
 		VectorImageType = itk.Image[PixelType, img_dimension]
 
 	print("Reading:", img_filename)
@@ -68,6 +80,7 @@ if __name__ == "__main__":
 	parser.add_argument('--iso_spacing', type=bool, help='Same spacing for resampled output', default=False)
 	parser.add_argument('--dimension', type=int, help='Image dimension', default=2)
 	parser.add_argument('--pixel_dimension', type=int, help='Pixel dimension', default=1)
+	parser.add_argument('--rgb', type=bool, help='Use RGB type pixel', default=False)
 	parser.add_argument('--out', type=str, help='Output image/directory', default="./out.nrrd")
 	parser.add_argument('--out_ext', type=str, help='Output extension type', default=None)
 
@@ -95,9 +108,17 @@ if __name__ == "__main__":
 	else:
 		raise "Set img or dir to resample!"
 
+	if(args.rgb):
+		if(args.pixel_dimension == 3):
+			print("Using: RGB type pixel with unsigned char")
+		elif(args.pixel_dimension == 4):
+			print("Using: RGBA type pixel with unsigned char")
+		else:
+			print("WARNING: Pixel size not supported!")
+
 	for fobj in filenames:
 
-		img = Resample(fobj["img"], args.size, args.fit_spacing, args.iso_spacing, args.dimension, args.pixel_dimension)
+		img = Resample(fobj["img"], args)
 
 		print("Writing:", fobj["out"])
 		WriterType = itk.ImageFileWriter[img]

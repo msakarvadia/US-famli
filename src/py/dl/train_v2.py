@@ -24,7 +24,6 @@ output_param_group.add_argument('--model', help='Output modelname, the output na
 
 train_param_group = parser.add_argument_group('Training parameters')
 train_param_group.add_argument('--nn', type=str, help='Type of neural network to use', default=None)
-train_param_group.add_argument('--sample_weight', nargs="+", type=float, help='Weight for each class if training classification in unbalanced data-set', default=None)
 train_param_group.add_argument('--nn2', type=str, help='Type of neural network to use', default=None)
 train_param_group.add_argument('--drop_prob', help='The probability that each element is dropped during training', type=float, default=0.0)
 train_param_group.add_argument('--learning_rate', help='Learning rate, default=1e-5', type=float, default=1e-03)
@@ -38,6 +37,7 @@ train_param_group.add_argument('--summary_writer', help='Number of steps to writ
 
 continue_param_group = parser.add_argument_group('Continue training', 'Use a previously saved model to continue the training.')
 continue_param_group.add_argument('--in_model', help='Input model name', default=None)
+continue_param_group.add_argument('--in_step', help='Input step', type=int, default=0)
 continue_param_group.add_argument('--in_model2', help='Input model name', default=None)
 
 export_param_group = parser.add_argument_group('Export as save_model format')
@@ -115,7 +115,7 @@ else:
 
 	with summary_writer.as_default():
 
-		step = 0
+		step = args.in_step
 		for epoch in range(num_epochs):
 			start = time.time()
 

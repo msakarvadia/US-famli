@@ -12,6 +12,7 @@ import uuid
 from collections import namedtuple
 import nrrd3D_2D
 import tfRecords_split
+from sklearn.utils import class_weight
 
 def _int64_feature(value):
 	if not isinstance(value, list):
@@ -100,9 +101,15 @@ def main(args):
 		#This is the number of classes
 		num_class = 0
 		print("Enumerate classes...")
+		compute_class_weight = True
+		y_train = []
 		for fobj in csv_rows:
 			class_name = fobj[args.enumerate]
+			if not os.path.exists(class_name):
+				y_train.append(class_name)
+
 			if os.path.exists(class_name):
+				compute_class_weight = False
 				#Count number of labels in image
 				img_label_read = itk.ImageFileReader.New(FileName=class_name)
 				img_label_read.Update()
@@ -124,6 +131,15 @@ def main(args):
 		#Put the total of elements for convenience
 		obj[args.enumerate]["num_class"] = num_class
 
+		if compute_class_weight:
+			obj[args.enumerate]["class_weights"] = {}
+
+			unique_classes = np.unique(y_train)
+			class_weights = np.array(class_weight.compute_class_weight('balanced', unique_classes, y_train))
+			for i, class_label in enumerate(unique_classes):
+				n = obj[args.enumerate]["class"][class_label]
+				obj[args.enumerate]["class_weights"][n] = class_weights[i]
+
 		print(obj[args.enumerate])
 
 	for fobj in csv_rows:
@@ -140,7 +156,7 @@ def main(args):
 					obj[key] = {}
 
 				##If the path exists then it will try to read it as an image
-				if(os.path.exists(fobj[key])):
+				if(isinstance(fobj[key], str) and os.path.exists(fobj[key])):
 					print("Reading:", fobj[key])
 					if(args.imageDimension == -1):
 						img_read = itk.ImageFileReader.New(FileName=fobj[key])
@@ -225,6 +241,16 @@ def main(args):
 					class_number = int(obj[args.enumerate]["class"][class_name])
 
 					feature[key] = _int64_feature(class_number)
+
+					if "class_weights" in obj[args.enumerate]:
+						cw = float(obj[args.enumerate]["class_weights"][class_number])
+						feature["class_weights"] = _float_feature(cw)
+						fobj["class_weights"] = cw
+						if not "class_weights" in obj:
+							obj["class_weights"] = {}
+							obj["class_weights"]["shape"] = [1]
+							obj["class_weights"]["type"] = "tf.float32"
+							obj["data_keys"].append("class_weights")
 
 					if(not "shape" in obj[key]):
 						obj[key]["shape"] = [1]
