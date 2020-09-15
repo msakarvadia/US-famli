@@ -18,6 +18,10 @@ in_group = parser.add_mutually_exclusive_group(required=True)
 in_group.add_argument('--args', help='JSON file with arguments.', type=str)
 in_group.add_argument('--json', type=str, help='json file with the description of the inputs, generate it with tfRecords.py')
 
+valid_param_group = parser.add_argument_group('Validation parameters')
+valid_param_group.add_argument('--json_v', type=str, help='json file with the description of the inputs/dataset for validation, generate it with tfRecords.py. The validation is done after every epoch', default=None)
+valid_param_group.add_argument('--patience', type=int, help='If the validation dataset does not improve after this many epochs, the training stops.', default=10)
+
 output_param_group = parser.add_argument_group('Output')
 output_param_group.add_argument('--out', help='Output dirname for the model', default="./out")
 output_param_group.add_argument('--model', help='Output modelname, the output name will be <out directory>/model-<num step>', default="model")
@@ -25,20 +29,23 @@ output_param_group.add_argument('--model', help='Output modelname, the output na
 train_param_group = parser.add_argument_group('Training parameters')
 train_param_group.add_argument('--nn', type=str, help='Type of neural network to use', default=None)
 train_param_group.add_argument('--nn2', type=str, help='Type of neural network to use', default=None)
+
 train_param_group.add_argument('--drop_prob', help='The probability that each element is dropped during training', type=float, default=0.0)
-train_param_group.add_argument('--learning_rate', help='Learning rate, default=1e-5', type=float, default=1e-03)
-train_param_group.add_argument('--decay_rate', help='decay rate, default=0.96', type=float, default=0.96)
-train_param_group.add_argument('--decay_steps', help='decay steps, default=10000', type=int, default=1000)
+train_param_group.add_argument('--learning_rate', help='Learning rate', type=float, default=1e-03)
+train_param_group.add_argument('--decay_rate', help='decay rate', type=float, default=0.0)
+train_param_group.add_argument('--decay_steps', help='decay steps', type=int, default=1000)
 train_param_group.add_argument('--staircase', help='staircase decay', type=bool, default=False)
 train_param_group.add_argument('--batch_size', help='Batch size for evaluation', type=int, default=8)
 train_param_group.add_argument('--num_epochs', help='Number of epochs', type=int, default=10)
-train_param_group.add_argument('--buffer_size', help='Shuffle buffer size', type=int, default=1000)
+train_param_group.add_argument('--buffer_size', help='Shuffle buffer size', type=int, default=0)
 train_param_group.add_argument('--summary_writer', help='Number of steps to write summary', type=int, default=100)
 
 continue_param_group = parser.add_argument_group('Continue training', 'Use a previously saved model to continue the training.')
 continue_param_group.add_argument('--in_model', help='Input model name', default=None)
 continue_param_group.add_argument('--in_step', help='Input step', type=int, default=0)
+continue_param_group.add_argument('--in_epoch', help='Input epoch', type=int, default=0)
 continue_param_group.add_argument('--in_model2', help='Input model name', default=None)
+continue_param_group.add_argument('--in_model2_svf', help='Input model 2 but in save model format', default=None)
 
 export_param_group = parser.add_argument_group('Export as save_model format')
 export_param_group.add_argument('--save_model', help='Export folder', default=None)
@@ -48,6 +55,10 @@ args = parser.parse_args()
 # Input Group
 json_filename = args.json
 
+# Validation Group
+json_filename_validation = args.json_v
+patience_validation = args.patience
+
 #Output Group
 outvariablesdirname = args.out
 modelname = args.model
@@ -55,6 +66,7 @@ modelname = args.model
 # Train params
 neural_network = args.nn
 neural_network2 = args.nn2
+in_model2_svf = args.in_model2_svf
 
 # In models to continue training
 in_model = args.in_model
@@ -67,11 +79,21 @@ buffer_size = args.buffer_size
 
 save_model = args.save_model
 
-tf_inputs = TFInputs(json_filename=json_filename)
-dataset = tf_inputs.tf_inputs(batch_size=batch_size, buffer_size=buffer_size)
+tf_inputs = TFInputs(json_filename=json_filename, batch_size=batch_size, buffer_size=buffer_size)
 
 NN = importlib.import_module("nn_v2." + neural_network).NN
 nn = NN(tf_inputs, args)
+
+use_validate = False
+global_valid_metric = 0
+global_valid_metric_patience = 0
+
+if json_filename_validation is not None:
+	if "valid_step" not in dir(NN):
+		raise "valid_step function not implemented. It should return true or false if it improves the evaluation"
+	use_validate = True
+	tf_inputs_v = TFInputs(json_filename=json_filename_validation, batch_size=batch_size, buffer_size=0)
+	dataset_validation = tf_inputs_v.tf_inputs()
 
 if(neural_network2):
 	NN2 = importlib.import_module("nn_v2." + neural_network2).NN
@@ -82,6 +104,7 @@ if(neural_network2):
 		nn2.load_weights(latest)
 
 	nn.set_nn2(nn2)
+	
 
 # optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
 # model = nn.get_symbolic_model()
@@ -113,11 +136,18 @@ else:
 
 	checkpoint_manager = tf.train.CheckpointManager(ckpt, checkpoint_path, max_to_keep=3, checkpoint_name=modelname)
 
+	if use_validate:
+		checkpoint_path_valid = os.path.join(outvariablesdirname, modelname + "_valid")
+		ckpt_valid = nn.get_checkpoint_manager()
+		checkpoint_manager_valid = tf.train.CheckpointManager(ckpt_valid, checkpoint_path_valid, max_to_keep=3, checkpoint_name=modelname + "_min")
+
 	with summary_writer.as_default():
 
 		step = args.in_step
-		for epoch in range(num_epochs):
+		for epoch in range(args.in_epoch, num_epochs):
 			start = time.time()
+
+			dataset = tf_inputs.tf_inputs()
 
 			for image_batch in dataset:
 
@@ -133,6 +163,22 @@ else:
 					print("Saving checkpoint", ckpt_save_path)
 
 			print ('Time for epoch {} is {} sec'.format(epoch + 1, time.time()-start))
+
+			if use_validate:
+				print("Start evaluation")
+				if nn.valid_step(dataset_validation):
+					global_valid_metric_patience = 0
+					ckpt_save_path_valid = checkpoint_manager_valid.save()
+					print("Validation metric improved!")
+					print("Saving checkpoint validation", ckpt_save_path_valid)					
+				else:
+					global_valid_metric_patience += 1
+					print("Validation did not improve:", global_valid_metric_patience)
+
+				if global_valid_metric_patience >= patience_validation:
+					break
+
+
 
 
 	ckpt_save_path = checkpoint_manager.save()

@@ -3,30 +3,34 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.keras import layers
 from tensorflow.keras import activations
+from tensorflow.keras import regularizers
+from tensorflow.keras import initializers
 import os
 import json
 
+def _gen_l2_regularizer(use_l2_regularizer=True, l2_weight_decay=1e-4):
+    return regularizers.l2(l2_weight_decay) if use_l2_regularizer else None
+
 class ConvBlock(layers.Layer):
-    def __init__(self, out_filters):
+    def __init__(self, out_filters, use_l2_regularizer=True):
         super(ConvBlock, self).__init__()
 
-        self.conv1 = layers.Conv2D(out_filters[0], (1, 1), strides=(1, 1), use_bias=False, padding='same')
+        self.conv1 = layers.Conv2D(out_filters[0], (1, 1), strides=(1, 1), use_bias=False, padding='same', kernel_initializer='he_normal', kernel_regularizer=_gen_l2_regularizer(use_l2_regularizer))
         self.bn1 = layers.BatchNormalization()
-        self.ac1 = layers.LeakyReLU()
+        self.ac1 = layers.ReLU()
 
-        self.conv2 = layers.Conv2D(out_filters[1], (3, 3), strides=(2, 2), use_bias=False, padding='same')
+        self.conv2 = layers.Conv2D(out_filters[1], (3, 3), strides=(2, 2), use_bias=False, padding='same', kernel_initializer='he_normal', kernel_regularizer=_gen_l2_regularizer(use_l2_regularizer))
         self.bn2 = layers.BatchNormalization()
-        self.ac2 = layers.LeakyReLU()
+        self.ac2 = layers.ReLU()
 
-        self.conv3 = layers.Conv2D(out_filters[2], (1, 1), strides=(1, 1), use_bias=False, padding='same')
+        self.conv3 = layers.Conv2D(out_filters[2], (1, 1), strides=(1, 1), use_bias=False, padding='same', kernel_initializer='he_normal', kernel_regularizer=_gen_l2_regularizer(use_l2_regularizer))
         self.bn3 = layers.BatchNormalization()
-        self.ac3 = layers.LeakyReLU()
 
-        self.conv4 = layers.Conv2D(out_filters[2], (1, 1), strides=(2, 2), use_bias=False, padding='same')
+        self.conv4 = layers.Conv2D(out_filters[2], (1, 1), strides=(2, 2), use_bias=False, padding='same', kernel_initializer='he_normal', kernel_regularizer=_gen_l2_regularizer(use_l2_regularizer))
         self.bn4 = layers.BatchNormalization()
 
         self.add = layers.Add()
-        self.ac4 = layers.LeakyReLU()
+        self.ac3 = layers.ReLU()
 
     def call(self, x0):
         x = self.conv1(x0)
@@ -39,33 +43,35 @@ class ConvBlock(layers.Layer):
 
         x = self.conv3(x)
         x = self.bn3(x)
-        x = self.ac3(x)
 
         shortcut = self.conv4(x0)
         shortcut = self.bn4(shortcut)
 
         x = self.add([x, shortcut])
 
-        return self.ac4(x)
+        return self.ac3(x)
+
+    def get_config(self):
+        return {"conv1": self.conv1, "bn1": self.bn1, "conv2": self.conv2, "bn2": self.bn2, "conv3": self.conv3, "bn3": self.bn3, "conv4": self.conv4, "bn4": self.bn4}
 
 class IdentityBlock(layers.Layer):
-    def __init__(self, out_filters):
+    def __init__(self, out_filters, use_l2_regularizer=True):
         super(IdentityBlock, self).__init__()
 
-        self.conv1 = layers.Conv2D(out_filters[0], (1, 1), strides=(1, 1), use_bias=False, padding='same')
+        self.conv1 = layers.Conv2D(out_filters[0], (1, 1), strides=(1, 1), use_bias=False, padding='same', kernel_initializer='he_normal', kernel_regularizer=_gen_l2_regularizer(use_l2_regularizer))
         self.bn1 = layers.BatchNormalization()
-        self.ac1 = layers.LeakyReLU()
+        self.ac1 = layers.ReLU()
 
-        self.conv2 = layers.Conv2D(out_filters[1], (3, 3), strides=(1, 1), use_bias=False, padding='same')
+        self.conv2 = layers.Conv2D(out_filters[1], (3, 3), strides=(1, 1), use_bias=False, padding='same', kernel_initializer='he_normal', kernel_regularizer=_gen_l2_regularizer(use_l2_regularizer))
         self.bn2 = layers.BatchNormalization()
-        self.ac2 = layers.LeakyReLU()
+        self.ac2 = layers.ReLU()
 
-        self.conv3 = layers.Conv2D(out_filters[2], (1, 1), strides=(1, 1), use_bias=False, padding='same')
+        self.conv3 = layers.Conv2D(out_filters[2], (1, 1), strides=(1, 1), use_bias=False, padding='same', kernel_initializer='he_normal', kernel_regularizer=_gen_l2_regularizer(use_l2_regularizer))
         self.bn3 = layers.BatchNormalization()
-        self.ac3 = layers.LeakyReLU()
+        self.ac3 = layers.ReLU()
 
         self.add = layers.Add()
-        self.ac4 = layers.LeakyReLU()
+        self.ac4 = layers.ReLU()
 
     def call(self, x0):
         x = self.conv1(x0)
@@ -94,11 +100,12 @@ class NN(tf.keras.Model):
         decay_rate = args.decay_rate
         staircase = args.staircase
         drop_prob = args.drop_prob
-        sample_weight = args.sample_weight
 
+        self.drop_prob = drop_prob
         self.data_description = tf_inputs.get_data_description()
         data_description = self.data_description
         self.num_channels = data_description[data_description["data_keys"][0]]["shape"][-1]
+        self.use_l2_regularizer = True
 
         self.num_classes = 2
         self.class_weights_index = -1
@@ -118,8 +125,7 @@ class NN(tf.keras.Model):
         self.resnet = self.make_resnet_model()
         self.resnet.summary()
 
-        # self.resnet_loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
-        self.resnet_loss = tf.keras.losses.CategoricalCrossentropy(from_logits=True)
+        self.resnet_loss = tf.keras.losses.SparseCategoricalCrossentropy()
 
         lr = tf.keras.optimizers.schedules.ExponentialDecay(learning_rate, decay_steps, decay_rate, staircase)
 
@@ -127,40 +133,46 @@ class NN(tf.keras.Model):
 
         self.metrics_acc = tf.keras.metrics.Accuracy()
 
+        self.metrics_validation = tf.keras.metrics.SparseCategoricalCrossentropy()
+        self.global_validation_metric = float("inf")
+        self.global_validation_step = args.in_epoch
+
     def make_resnet_model(self):
 
         model = tf.keras.Sequential()
 
-        model.add(layers.BatchNormalization(input_shape=[512, 512, self.num_channels]))
-        model.add(layers.Conv2D(64, (1, 1), strides=(2, 2), use_bias=False, padding='same'))
+        model.add(layers.InputLayer(input_shape=[256, 256, self.num_channels]))
 
-        model.add(ConvBlock([64,64,128]))
-        model.add(IdentityBlock([64,64,128]))
+        model.add(layers.Lambda(lambda x: tf.pad(x, [[0,0],[3,3],[3,3],[0,0]], mode='CONSTANT', constant_values=-2.0)))
+        model.add(layers.Conv2D(64, (7, 7), strides=(2, 2), use_bias=False, padding='valid', kernel_initializer='he_normal', kernel_regularizer=_gen_l2_regularizer(self.use_l2_regularizer)))
+        model.add(layers.BatchNormalization())
+        model.add(layers.ReLU())
+        model.add(layers.MaxPooling2D((3, 3), strides=(2, 2), padding='same'))
 
-        model.add(ConvBlock([64,64,128]))
-        model.add(IdentityBlock([64,64,128]))
+        model.add(ConvBlock([64,64,256], self.use_l2_regularizer))
+        model.add(IdentityBlock([64,64,256], self.use_l2_regularizer))
+        model.add(IdentityBlock([64,64,256], self.use_l2_regularizer))
 
-        model.add(ConvBlock([128,128,256]))
-        model.add(IdentityBlock([128,128,256]))
-        model.add(IdentityBlock([128,128,256]))
+        model.add(ConvBlock([128,128,512], self.use_l2_regularizer))
+        model.add(IdentityBlock([128,128,512], self.use_l2_regularizer))
+        model.add(IdentityBlock([128,128,512], self.use_l2_regularizer))
+        model.add(IdentityBlock([128,128,512], self.use_l2_regularizer))
 
-        model.add(ConvBlock([128,128,256]))
-        model.add(IdentityBlock([128,128,256]))
-        model.add(IdentityBlock([128,128,256]))
+        model.add(ConvBlock([256, 256, 1024], self.use_l2_regularizer))
+        model.add(IdentityBlock([256, 256, 1024], self.use_l2_regularizer))
+        model.add(IdentityBlock([256, 256, 1024], self.use_l2_regularizer))
+        model.add(IdentityBlock([256, 256, 1024], self.use_l2_regularizer))
+        model.add(IdentityBlock([256, 256, 1024], self.use_l2_regularizer))
+        model.add(IdentityBlock([256, 256, 1024], self.use_l2_regularizer))
 
-        model.add(ConvBlock([256,256,512]))
-        model.add(IdentityBlock([256,256,512]))
-        model.add(IdentityBlock([256,256,512]))
-        model.add(IdentityBlock([256,256,512]))
-
-        model.add(ConvBlock([512,512,1024]))
-        model.add(IdentityBlock([512,512,1024]))
-        model.add(IdentityBlock([512,512,1024]))
-        model.add(IdentityBlock([512,512,1024]))
-        model.add(IdentityBlock([512,512,1024]))
+        model.add(ConvBlock([512,512,2048], self.use_l2_regularizer))
+        model.add(IdentityBlock([512,512,2048], self.use_l2_regularizer))
+        model.add(IdentityBlock([512,512,2048], self.use_l2_regularizer))
         
-        model.add(layers.Reshape((4*4*1024,)))
-        model.add(layers.Dense(self.num_classes, use_bias=False))
+        model.add(layers.GlobalAveragePooling2D())
+        
+        model.add(layers.Dense(self.num_classes, kernel_initializer=initializers.RandomNormal(stddev=0.01), kernel_regularizer=_gen_l2_regularizer(self.use_l2_regularizer), bias_regularizer=_gen_l2_regularizer(self.use_l2_regularizer)))
+        model.add(layers.Softmax())
 
         return model
 
@@ -168,7 +180,7 @@ class NN(tf.keras.Model):
     @tf.function
     def train_step(self, train_tuple):
         
-        images = train_tuple[1]/255
+        images = train_tuple[0]
         labels = train_tuple[self.enumerate_index]
         sample_weight = None
 
@@ -178,8 +190,6 @@ class NN(tf.keras.Model):
         with tf.GradientTape() as resnet_tape:
 
             x_logits = self.resnet(images)
-
-            labels = tf.one_hot(labels, self.num_classes, axis=1)
             loss = self.resnet_loss(labels, x_logits, sample_weight=sample_weight)
 
         gradients_of_resnet = resnet_tape.gradient(loss, self.trainable_variables)
@@ -188,20 +198,41 @@ class NN(tf.keras.Model):
 
         return loss, x_logits
 
+    def valid_step(self, dataset_validation):
+
+        for valid_tuple in dataset_validation:
+            images = valid_tuple[0]
+            labels = valid_tuple[self.enumerate_index]
+            
+            x_c = self.resnet(images)
+            
+            self.metrics_validation.update_state(labels, x_c)
+
+        validation_result = self.metrics_validation.result()
+        tf.summary.scalar('validation_loss', validation_result, step=self.global_validation_step)
+        self.global_validation_step += 1
+
+        print("validation loss:", validation_result.numpy())
+        if validation_result < self.global_validation_metric:
+            self.global_validation_metric = validation_result
+            return True
+
+        return False
+
     def summary(self, images, tr_step, step):
 
 
-        imgs = images[1]
+        imgs = images[0]
         labels = tf.reshape(images[self.enumerate_index], -1)
 
         loss = tr_step[0]
-        prediction = tf.argmax(tf.nn.softmax(tr_step[1]), axis=1)
+        prediction = tf.argmax(tr_step[1], axis=1)
 
         self.metrics_acc.update_state(labels, prediction)
         acc_result = self.metrics_acc.result()
 
         tf.summary.scalar("loss", loss, step=step)
-        tf.summary.image('images', imgs/255., step=step)
+        tf.summary.image('images', imgs, step=step)
         tf.summary.scalar('accuracy', acc_result, step=step)
 
         sample_weight = np.ones_like(labels.numpy())
@@ -215,8 +246,7 @@ class NN(tf.keras.Model):
             optimizer=self.optimizer)
 
     def save_model(self, save_model):
-        model = tf.keras.Sequential([layers.Lambda(lambda x: x/255, input_shape=(512, 512, self.num_channels))] + self.resnet.layers)
-        model.add(layers.Softmax())
+        model = self.resnet
         model.summary()
         model.save(save_model)
 

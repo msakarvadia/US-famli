@@ -11,7 +11,7 @@ from pandas import read_csv, notna, notnull
 
 class TFInputs():
 
-    def __init__(self, json_filename):
+    def __init__(self, json_filename, batch_size=1, buffer_size=0):
 
         self.json_filename = json_filename
         self.keys_to_features = {}
@@ -28,6 +28,17 @@ class TFInputs():
             self.num_classes = self.data_description[self.enumerate]["num_class"]
         else:
             self.num_classes = 2
+
+        tfrecords_arr = []
+        tfrecords_dir = os.path.join(os.path.dirname(self.json_filename), self.data_description["tfrecords"], '**/*.tfrecord')
+        print("Reading tfRecords from", tfrecords_dir)
+        for tfr in glob.iglob(tfrecords_dir, recursive=True):
+          tfrecords_arr.append(tfr)
+        print("tfRecords found:", len(tfrecords_arr))
+
+        self.tfrecords_arr = tfrecords_arr
+        self.batch_size = batch_size
+        self.buffer_size = buffer_size
 
 
     def get_data_description(self):
@@ -56,22 +67,20 @@ class TFInputs():
 
         return parsed
 
-    def tf_inputs(self, batch_size=1, buffer_size=1000):
+    def tf_inputs(self):
 
         if "csv" in self.data_description:
-            return self.tf_inputs_dataframe(batch_size, buffer_size)
+            return self.tf_inputs_dataframe(self.batch_size, self.buffer_size)
         else:
-            tfrecords_arr = []
-            tfrecords_dir = os.path.join(os.path.dirname(self.json_filename), self.data_description["tfrecords"], '**/*.tfrecord')
-            print("Reading tfRecords from", tfrecords_dir)
-            for tfr in glob.iglob(tfrecords_dir, recursive=True):
-              tfrecords_arr.append(tfr)
-            print("tfRecords found:", len(tfrecords_dir))
-            
+
+            tfrecords_arr = np.array(self.tfrecords_arr)
+            tfrecords_arr = tfrecords_arr[np.random.permutation(tfrecords_arr.size)]
+
             dataset = tf.data.TFRecordDataset(tfrecords_arr)
             dataset = dataset.map(self.read_and_decode)
-            dataset = dataset.shuffle(buffer_size=buffer_size)
-            dataset = dataset.batch(batch_size)
+            if(self.buffer_size > 0):
+                dataset = dataset.shuffle(buffer_size=self.buffer_size)
+            dataset = dataset.batch(self.batch_size)
 
             return dataset
 

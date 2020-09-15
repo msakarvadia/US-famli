@@ -108,10 +108,11 @@ def main(args):
 			if not os.path.exists(class_name):
 				y_train.append(class_name)
 
-			if os.path.exists(class_name):
+			if os.path.exists(class_name) and compute_class_weight:
 				compute_class_weight = False
 				#Count number of labels in image
-				img_label_read = itk.ImageFileReader.New(FileName=class_name)
+				ImageType = itk.Image[itk.SS, args.imageDimension]
+				img_label_read = itk.ImageFileReader[ImageType].New(FileName=class_name)
 				img_label_read.Update()
 				img_label = img_label_read.GetOutput()
 
