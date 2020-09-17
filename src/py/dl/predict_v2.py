@@ -136,8 +136,9 @@ def image_read(filename):
 
 
 def image_save(img_obj, prediction):
+  Dimension = prediction.ndim - 1
   PixelDimension = prediction.shape[-1]
-  Dimension = 2
+  print("Dimension:", Dimension, "PixelDimension:", PixelDimension)
   
   if(PixelDimension < 7):
     if(PixelDimension >= 3 and os.path.splitext(img_obj["out"])[1] not in ['.jpg', '.png']):
