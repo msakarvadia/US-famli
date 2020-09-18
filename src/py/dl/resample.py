@@ -55,6 +55,9 @@ def Resample(img_filename, args):
 	if(iso_spacing):
 		max_spacing = np.max(output_spacing)
 		output_spacing = np.ones_like(output_spacing)*max_spacing
+
+	if(args.spacing is not None):
+		output_spacing = args.spacing
 	
 	resampleImageFilter = ResampleType.New()
 	interpolator = InterpolatorType.New()
@@ -82,8 +85,9 @@ if __name__ == "__main__":
 
 	parser.add_argument('--csv_column', type=str, default='image', help='CSV column name (Only used if flag csv is used)')
 	parser.add_argument('--csv_root_path', type=str, default='', help='Replaces a root path directory to empty, this is use to recreate a directory structure in the output directory, otherwise, the output name will be the name in the csv (only if csv flag is used)')
-	parser.add_argument('--size', nargs="+", type=int, help='Output size', default=None)
+	parser.add_argument('--size', nargs="+", type=int, help='Output size, -1 to leave unchanged', default=None)
 	parser.add_argument('--linear', type=bool, help='Use linear interpolation.', default=False)
+	parser.add_argument('--spacing', nargs="+", type=float, default=None, help='Use a pre defined spacing')
 	parser.add_argument('--fit_spacing', type=bool, help='Fit spacing to output', default=False)
 	parser.add_argument('--iso_spacing', type=bool, help='Same spacing for resampled output', default=False)
 	parser.add_argument('--dimension', type=int, help='Image dimension', default=2)
