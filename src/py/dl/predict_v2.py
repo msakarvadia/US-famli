@@ -27,6 +27,7 @@ parser.add_argument('--csv_root_path', type=str, default='', help='Replaces a ro
 parser.add_argument('--model', help='Directory of saved model format')
 parser.add_argument('--prediction_type', help='Type of prediction. img, class, seg', default="img")
 parser.add_argument('--imageDimension', type=int, help='Image dimension', default=2)
+parser.add_argument('--sequence_prediction', type=bool, help='The image is a sequence and is using a 2D trained for prediction', default=False)
 
 parser.add_argument('--out', type=str, help='Output image, csv, or directory. If --dir flag is used the output image name will be the <Directory set in out flag>/<image filename in directory dir>', default="out")
 parser.add_argument('--out_ext', type=str, help='Output extension for images', default='.nrrd')
@@ -130,7 +131,8 @@ def image_read(filename):
   if(img.GetNumberOfComponentsPerPixel() == 1):
     tf_img_shape = tf_img_shape + [1]
 
-  tf_img_shape = [1] + tf_img_shape
+  if not args.sequence_prediction:
+    tf_img_shape = [1] + tf_img_shape
 
   return img, img_np, tf_img_shape
 
@@ -210,8 +212,10 @@ if(int(tf.__version__.split('.')[0]) > 1):
                   'input_x:0': np.reshape(img_np, tf_img_shape)
               }
           )
-
-          prediction = np.array(prediction[0])
+          if(args.sequence_prediction):
+            prediction = np.array(prediction)
+          else:
+            prediction = np.array(prediction[0])
           if(prediction_type == "img" or prediction_type == "seg"):
             image_save(img_obj, prediction)
           elif(prediction_type == "class"):
@@ -232,7 +236,11 @@ if(int(tf.__version__.split('.')[0]) > 1):
         img, img_np, tf_img_shape = image_read(img_obj["img"])
         
         prediction = model.predict(np.reshape(img_np, tf_img_shape))
-        prediction = np.array(prediction[0])
+        if(args.sequence_prediction):
+          prediction = np.array(prediction)
+        else:
+          prediction = np.array(prediction[0])
+
         if(prediction_type == "img" or prediction_type == "seg"):
           image_save(img_obj, prediction)
         elif(prediction_type == "class"):
