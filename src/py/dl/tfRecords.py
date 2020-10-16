@@ -94,7 +94,31 @@ def main(args):
 	if(not os.path.exists(args.out) or not os.path.isdir(args.out)):
 		os.makedirs(args.out)
 
-	if(args.enumerate):
+	if(args.bins_sample_weight is not None and args.bins is not None):
+		y_train = []
+
+		for fobj in csv_rows:
+			y_train.append(float(fobj[args.bins_sample_weight]))
+
+		hist, bin_edges = np.histogram(y_train, bins=args.bins, range=args.bins_range)
+		y_train = np.digitize(y_train, bin_edges)
+
+		unique_classes = np.unique(y_train)
+		class_weights = np.array(class_weight.compute_class_weight('balanced', unique_classes, y_train))
+
+		unique_classes_obj = {}
+		for uc, cw in zip(unique_classes, class_weights):
+			unique_classes_obj[uc] = cw
+		
+		for fobj, y in zip(csv_rows, y_train):
+			fobj["class_weights"] = unique_classes_obj[y]
+		
+		obj["class_weights"] = {}
+		obj["class_weights"]["shape"] = [1]
+		obj["class_weights"]["type"] = "tf.float32"
+		obj["data_keys"].append("class_weights")
+
+	elif(args.enumerate):
 		obj["enumerate"] = args.enumerate
 		obj[args.enumerate] = {}
 		obj[args.enumerate]["class"] = {}
@@ -103,34 +127,52 @@ def main(args):
 		print("Enumerate classes...")
 		compute_class_weight = True
 		y_train = []
-		for fobj in csv_rows:
-			class_name = fobj[args.enumerate]
-			if not os.path.exists(class_name):
-				y_train.append(class_name)
-
-			if os.path.exists(class_name) and compute_class_weight:
-				compute_class_weight = False
-				#Count number of labels in image
-				ImageType = itk.Image[itk.SS, args.imageDimension]
-				img_label_read = itk.ImageFileReader[ImageType].New(FileName=class_name)
-				img_label_read.Update()
-				img_label = img_label_read.GetOutput()
-
-				label_stats = itk.LabelStatisticsImageFilter[type(img_label),type(img_label)].New()
-				label_stats.SetInput(img_label)
-				label_stats.SetLabelInput(img_label)
-				label_stats.Update()
+		if args.bins is not None:
+			for fobj in csv_rows:
+				class_name = fobj[args.enumerate]
+				y_train.append(float(class_name))
+			
+			hist, bin_edges = np.histogram(y_train, bins=args.bins, range=args.bins_range)
+			y_train = np.digitize(y_train, bin_edges)
+			
+			for fobj, class_digit in zip(csv_rows, y_train):
 				
-				for class_label in label_stats.GetValidLabelValues():
-					if(not class_label in obj[args.enumerate]["class"]):
-						obj[args.enumerate]["class"][class_label] = num_class
-						num_class += 1
+				fobj[args.enumerate] = class_digit
 
-			elif(not class_name in obj[args.enumerate]["class"]):
-				obj[args.enumerate]["class"][class_name] = num_class
-				num_class += 1
-		#Put the total of elements for convenience
-		obj[args.enumerate]["num_class"] = num_class
+				if(not class_digit in obj[args.enumerate]["class"]):
+					obj[args.enumerate]["class"][str(class_digit)] = int(class_digit)
+			
+			obj[args.enumerate]["num_class"] = args.bins
+
+		else:
+			for fobj in csv_rows:
+				class_name = fobj[args.enumerate]
+				if not os.path.exists(class_name):
+					y_train.append(class_name)
+
+				if os.path.exists(class_name) and compute_class_weight:
+					compute_class_weight = False
+					#Count number of labels in image
+					ImageType = itk.Image[itk.SS, args.image_dimension]
+					img_label_read = itk.ImageFileReader[ImageType].New(FileName=class_name)
+					img_label_read.Update()
+					img_label = img_label_read.GetOutput()
+
+					label_stats = itk.LabelStatisticsImageFilter[type(img_label),type(img_label)].New()
+					label_stats.SetInput(img_label)
+					label_stats.SetLabelInput(img_label)
+					label_stats.Update()
+					
+					for class_label in label_stats.GetValidLabelValues():
+						if(not class_label in obj[args.enumerate]["class"]):
+							obj[args.enumerate]["class"][class_label] = num_class
+							num_class += 1
+
+				elif(not class_name in obj[args.enumerate]["class"]):
+					obj[args.enumerate]["class"][class_name] = num_class
+					num_class += 1
+			#Put the total of elements for convenience
+			obj[args.enumerate]["num_class"] = num_class
 
 		if compute_class_weight:
 			obj[args.enumerate]["class_weights"] = {}
@@ -138,7 +180,7 @@ def main(args):
 			unique_classes = np.unique(y_train)
 			class_weights = np.array(class_weight.compute_class_weight('balanced', unique_classes, y_train))
 			for i, class_label in enumerate(unique_classes):
-				n = obj[args.enumerate]["class"][class_label]
+				n = obj[args.enumerate]["class"][str(class_label)]
 				obj[args.enumerate]["class_weights"][n] = class_weights[i]
 
 		print(obj[args.enumerate])
@@ -146,6 +188,7 @@ def main(args):
 	for fobj in csv_rows:
 		
 		feature = {}
+		feature_list = {}
 		# This seed is only used when images of different sizes are used
 		random_delta_seed = None
 
@@ -159,49 +202,39 @@ def main(args):
 				##If the path exists then it will try to read it as an image
 				if(isinstance(fobj[key], str) and os.path.exists(fobj[key])):
 					print("Reading:", fobj[key])
-					if(args.imageDimension == -1):
+					if(args.image_dimension == -1):
 						img_read = itk.ImageFileReader.New(FileName=fobj[key])
 						img_read.Update()
 						img = img_read.GetOutput()
 					else:
-						ImageType = itk.VectorImage[itk.F, args.imageDimension]
+						if(args.image_dimension == 1):
+							if(args.pixel_dimension != -1):
+								ImageType = itk.Image[itk.Vector[itk.F, args.pixel_dimension], 2]
+							else:
+								ImageType = itk.VectorImage[itk.F, 2]
+						else:
+							if(args.pixel_dimension != -1):
+								ImageType = itk.Image[itk.Vector[itk.F, args.pixel_dimension], args.image_dimension]
+							else:
+								ImageType = itk.VectorImage[itk.F, args.image_dimension]
 
 						img_read = itk.ImageFileReader[ImageType].New(FileName=fobj[key])
 						img_read.Update()
 						img = img_read.GetOutput()
 					
 					img_np = itk.GetArrayViewFromImage(img).astype(float)
-					if(args.resize):
-						obj["resize"] = args.resize
-						
-						resize_shape = list(args.resize)
-						if(img.GetNumberOfComponentsPerPixel() > 1):
-							resize_shape += [img.GetNumberOfComponentsPerPixel()]
-						img_np_x =  np.zeros(resize_shape)
 
-						img_np_assign_shape = []
-						# Compute the difference between the shapes
-						img_np_shape = img_np.shape
-						if(img_np_shape[0] == 1):
-						    # If the first component is 1 we remove it. It means that is a 2D image but was saved as 3D
-						    img_np_shape = img_np_shape[1:]
-						delta_shape = np.array(resize_shape) - np.array(img_np_shape)
-						
-						if(random_delta_seed is None):
-							# We have to use the same seed in the case we are storing multiple images, i.e., per input row
-							random_delta_seed = np.random.rand(delta_shape.size)
-						random_delta = (random_delta_seed*delta_shape).astype(int)
+					if(args.image_dimension == 1):
+						img_np = img_np.reshape([s for s in img_np.shape if s != 1])
 
-						# We create the assign operation using the random_delta. We don't want the network to be specific to 
-						# the image position
-						for s, r in zip(img_np_shape, random_delta):
-							img_np_assign_shape.append(str(r) + ":" + str(s+r))
+					if(args.scale_intensity_columns is not None and key in args.scale_intensity_columns):
+						print("Scale intensity", key, args.scale_intensity)
+						img_np *= args.scale_intensity
 
-						assign_img = "img_np_x[" + ",".join(img_np_assign_shape) + "] = img_np"
-						exec(assign_img)
-						img_np = img_np_x
-
-					feature[key] =  _float_feature(img_np.reshape(-1).tolist())
+					if args.sequence:
+						feature_list[key] = tf.train.FeatureList(feature=[_float_feature(frame.reshape(-1).tolist()) for frame in img_np])
+					else:
+						feature[key] =  _float_feature(img_np.reshape(-1).tolist())
 
 					# Put the shape of the image in the json object if it does not exists. This is done for global information
 					img_shape = list(img_np.shape)
@@ -217,10 +250,11 @@ def main(args):
 					if(not "shape" in obj[key]):
 						print("Shape", key, img_shape)
 						obj[key]["shape"] = img_shape
-					else:
-						if not np.all(np.equal(obj[key]["shape"] , img_shape)):
-							print(fobj[key], file=sys.stderr)
-							raise "The images in your training set do not have the same dimensions!"
+						if args.sequence:
+							obj[key]["shape"] = obj[key]["shape"][1:]
+							obj[key]["sequence"] = True
+							print("sequence", obj[key]["shape"])
+
 
 					if(not "max" in obj[key]):
 						obj[key]["max"] = float(np.max(img_np))
@@ -239,7 +273,7 @@ def main(args):
 					# If its an enumeration, it will save the class enumeration as int. If is a label map, it never reached this step
 					# because it was read as an image. 
 					class_name = fobj[key]
-					class_number = int(obj[args.enumerate]["class"][class_name])
+					class_number = int(obj[args.enumerate]["class"][str(class_name)])
 
 					feature[key] = _int64_feature(class_number)
 
@@ -288,7 +322,11 @@ def main(args):
 			fobj["tfRecord"] = record_path
 
 			writer = tf.io.TFRecordWriter(record_path)
-			example = tf.train.Example(features=tf.train.Features(feature=feature))
+
+			if args.sequence:
+				example = tf.train.SequenceExample(context=tf.train.Features(feature=feature), feature_lists=tf.train.FeatureLists(feature_list=feature_list))
+			else:
+				example = tf.train.Example(features=tf.train.Features(feature=feature))
 
 			print("Writing record", fobj)
 
@@ -296,8 +334,9 @@ def main(args):
 			writer.close()
 
 		except Exception as e:
-			print("Error converting to tfRecord", obj, e, file=sys.stderr)
-			print("I'll keep on going...")
+			print("Error converting to tfRecord", e, file=sys.stderr)
+			print(obj, file=sys.stderr)
+			print(fobj, file=sys.stderr)
 
 	obj['tfrecords'] = os.path.basename(args.out.rstrip(os.sep))
 	
@@ -306,7 +345,7 @@ def main(args):
 
 	print(obj)
 	with open(outjson, "w") as f:
-		f.write(json.dumps(obj))
+		f.write(json.dumps(obj, sort_keys=True, indent=4))
 	
 	outcsv = None
 	if(len(csv_rows) > 0):
@@ -336,12 +375,18 @@ if __name__ == "__main__":
 	parser = argparse.ArgumentParser(description='Writes data to tfrecords format using a CSV file description as input and creates a JSON file with a description. The column headers are used as keys to store in the tfRecord. a row may contain image filenames, categories or other information to save in tfRecords format. If an image column is found, the maximum pixel value for each image is calulated and written into the json file. Additionally, it will save a new csv file indicating which tfRecord corresponds to the row.')
 	
 	parser.add_argument('--csv', type=str, help='CSV file with dataset information,', required=True)
+	parser.add_argument('--scale_intensity', type=float, default=1.0, help="Scale image intensity by this factor before storing as tfRecord")
+	parser.add_argument('--scale_intensity_columns', type=str, nargs="+", default=None, help="Column names of images that should be rescaled before storing")
 	parser.add_argument('--enumerate', type=str, default=None, help='Column name in CSV. If you are storing a label or category to perform a classification task. If it is an image, it will read the FIRST image in your csv and extract the existing labels.')
+	parser.add_argument('--bins', type=int, default=None, help='Use a histogram with a defined number of bins to create the different classes')
+	parser.add_argument('--bins_range', type=float, nargs="+", default=None, help='Bins range')
+	parser.add_argument('--bins_sample_weight', type=str, default=None, help='Column name in CSV. If you want to generate histogram bins and compute a weight')
 	parser.add_argument('--slice', type=bool, default=False, help="If it is a 3D image, saves slices in all the major axis and the stores them as tfRecords")
-	parser.add_argument('--resize', nargs="+", type=int, default=None, help='Resize images to store as tfRecord. The resize parameter must be equal or larger than the largest image in the dataset. Do not include channels and flip axes, i.e, z y x or y x for 3D, 2D images respectively')
 	parser.add_argument('--out', type=str, default="./out", help="Output directory")
 	parser.add_argument('--split', type=float, default=0, help="Split the data for evaluation. [0-1], 0=no split")
-	parser.add_argument('--imageDimension', type=int, default=-1, help="Set image dimension, by default it will try to guess it but you can set this here. Or use it when a type is not wrapped. Ex. RGB double, it will read the image as a float vector image")
+	parser.add_argument('--image_dimension', type=int, default=-1, help="Set image dimension, by default it will try to guess it but you can set this here. Or use it when a type is not wrapped. Ex. RGB double, it will read the image as a float vector image")
+	parser.add_argument('--pixel_dimension', type=int, default=-1, help="Set pixel dimension, by default it will try to guess it but you can set this here.")
+	parser.add_argument('--sequence', type=bool, default=0, help="If the images are sequences and have variable length set this flag")
 
 	args = parser.parse_args()
 

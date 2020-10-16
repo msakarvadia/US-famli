@@ -8,6 +8,7 @@ import json
 import glob
 import itk
 import sys
+import pandas
 import csv
 import resample
 
@@ -20,19 +21,30 @@ in_group = parser.add_mutually_exclusive_group(required=True)
 in_group.add_argument('--img', type=str, help='Input image for prediction')
 in_group.add_argument('--dir', type=str, help='Directory with images for prediction')
 in_group.add_argument('--csv', type=str, help='CSV file with images')
-parser.add_argument('--resample', nargs="+", type=int, default=None, help='Size to resample')
-parser.add_argument('--csv_column', type=str, default='image', help='CSV column name (Only used if flag csv is used)')
+
+resample_group = parser.add_argument_group('Resample parameters')
+resample_group.add_argument('--resample', type=bool, default=False, help='Resample the image')
+resample_group.add_argument('--size', nargs="+", type=int, help='Output size, -1 to leave unchanged', default=None)
+resample_group.add_argument('--linear', type=bool, help='Use linear interpolation.', default=False)
+resample_group.add_argument('--spacing', nargs="+", type=float, default=None, help='Use a pre defined spacing')
+resample_group.add_argument('--fit_spacing', type=bool, help='Fit spacing to output', default=False)
+resample_group.add_argument('--iso_spacing', type=bool, help='Same spacing for resampled output', default=False)
+resample_group.add_argument('--rgb', type=bool, help='Use RGB type pixel', default=False)
+
+
+parser.add_argument('--csv_column', type=str, default='img', help='CSV column name (Only used if flag csv is used)')
 parser.add_argument('--csv_root_path', type=str, default='', help='Replaces a root path directory to empty, this is use to recreate a directory structure in the output directory, otherwise, the output name will be the name in the csv (only if csv flag is used)')
 
 parser.add_argument('--model', help='Directory of saved model format')
-parser.add_argument('--prediction_type', help='Type of prediction. img, class, seg', default="img")
-parser.add_argument('--imageDimension', type=int, help='Image dimension', default=2)
-parser.add_argument('--sequence_prediction', type=bool, help='The image is a sequence and is using a 2D trained for prediction', default=False)
+parser.add_argument('--prediction_type', help='Type of prediction. img, seg, class, scalar', default="img")
+parser.add_argument('--image_dimension', type=int, help='Image dimension', default=2)
+parser.add_argument('--pixel_dimension', type=int, help='Pixel dimension. It will try to guess it by default.', default=-1)
+parser.add_argument('--batch_prediction', type=bool, help='The image is 3D/sequence but the network is for 2D images. i.e., it will use the 3rd dimension as a batch', default=False)
 
 parser.add_argument('--out', type=str, help='Output image, csv, or directory. If --dir flag is used the output image name will be the <Directory set in out flag>/<image filename in directory dir>', default="out")
 parser.add_argument('--out_ext', type=str, help='Output extension for images', default='.nrrd')
 parser.add_argument('--out_basename', type=bool, default=False, help='Keeps only the filename for the output, i.e, does not create a directory structure for the output image filename')
-parser.add_argument('--ow', type=bool, help='Overwrite outputs', default=True)
+parser.add_argument('--ow', type=int, help='Overwrite outputs', default=1)
 parser.add_argument('--tf1', type=bool, help='Enable tf1', default=False)
 
 args = parser.parse_args()
@@ -59,6 +71,8 @@ if os.path.exists(data_description_filename):
       print(class_obj)
     if "tf1" in data_description and data_description["tf1"]:
       tf1 = True
+    if "prediction_type" in data_description:
+      prediction_type = data_description["prediction_type"]
 
 
 filenames = []
@@ -67,9 +81,13 @@ if(args.img):
   print('image_name', args.img)
   fobj = {}
   fobj["img"] = args.img
-  fobj["out"] = out_name
-  if args.ow or not os.path.exists(fobj["out"]):
+  if(prediction_type == "img" or prediction_type == "seg"):
+    fobj["out"] = out_name
+    if args.ow or not os.path.exists(fobj["out"]):
+      filenames.append(fobj)
+  else:
     filenames.append(fobj)
+
 else:
 
   image_filenames = []
@@ -80,14 +98,8 @@ else:
     for img in glob.iglob(normpath, recursive=True):
       if os.path.isfile(img) and True in [ext in img for ext in [".nrrd", ".nii", ".nii.gz", ".mhd", ".dcm", ".DCM", ".jpg", ".png"]]:
         image_filenames.append(os.path.realpath(img))
-  elif(args.csv):
-    replace_dir_name = args.csv_root_path
-    with open(args.csv) as csvfile:
-      csv_reader = csv.DictReader(csvfile)
-      for row in csv_reader:
-        image_filenames.append(row[args.csv_column])
 
-  for img in image_filenames:
+    for img in image_filenames:
       fobj = {}
       fobj["img"] = img
       if(prediction_type == "img" or prediction_type == "seg"):
@@ -103,22 +115,70 @@ else:
         if not os.path.exists(os.path.dirname(fobj["out"])):
           os.makedirs(os.path.dirname(fobj["out"]))
 
-      if args.ow or not os.path.exists(fobj["out"]):
+      if args.ow or ("out" in fobj and not os.path.exists(fobj["out"])) or prediction_type == "class" or prediction_type == "scalar":
         filenames.append(fobj)
 
+  elif(args.csv):
+    replace_dir_name = args.csv_root_path
+    with open(args.csv) as csvfile:
+      df = pandas.read_csv(csvfile)
+      df.rename({args.csv_column: "img"})
+
+      img_out = []
+
+      if(prediction_type == "img" or prediction_type == "seg"):
+        for index, row in df.iterrows():
+          img = row["img"]
+        
+          image_dir_filename = img.replace(replace_dir_name, '')
+          if(out_ext):
+            image_dir_filename = os.path.splitext(image_dir_filename)[0] +  out_ext
+
+          if(args.out_basename):
+            image_dir_filename = os.path.basename(image_dir_filename)
+            
+          out_fn = os.path.normpath("/".join([out_name, image_dir_filename]))
+
+          if not os.path.exists(os.path.dirname(out_fn)):
+            os.makedirs(os.path.dirname(out_fn))
+
+          if args.ow or not os.path.exists(out_fn):
+            img_out.append(out_fn)
+          else:
+            img_out.append(None)
+      
+      if len(img_out) > 0:
+        df["out"] = img_out
+        df = df[df["out"].notnull()]
+
+      filenames = df.to_dict('records')
+  
 
 def image_read(filename):
 
-  print("Reading:", filename)
-  ImageType = itk.VectorImage[itk.F, args.imageDimension]
-  img_read = itk.ImageFileReader[ImageType].New(FileName=filename)
-  img_read.Update()
-  img = img_read.GetOutput()
-
   if(args.resample):
-    img = resample.Resample(filename, args.resample, 1, 1, 2, img.GetNumberOfComponentsPerPixel())
+    img = resample.Resample(filename, args)
+  else:
+    print("Reading:", filename)
+    if(args.image_dimension == 1):
+      if(args.pixel_dimension != -1):
+        ImageType = itk.Image[itk.Vector[itk.F, args.pixel_dimension], 2]
+      else:
+        ImageType = itk.VectorImage[itk.F, 2]
+    else:
+      if(args.pixel_dimension != -1):
+        ImageType = itk.Image[itk.Vector[itk.F, args.pixel_dimension], args.image_dimension]
+      else:
+        ImageType = itk.VectorImage[itk.F, args.image_dimension]
+      
+    img_read = itk.ImageFileReader[ImageType].New(FileName=filename)
+    img_read.Update()
+    img = img_read.GetOutput()
   
   img_np = itk.GetArrayViewFromImage(img).astype(float)
+
+  if(args.image_dimension == 1):
+    img_np = img_np.reshape([s for s in img_np.shape if s != 1])
 
   # Put the shape of the image in the json object if it does not exists. This is done for global information
   tf_img_shape = list(img_np.shape)
@@ -131,13 +191,14 @@ def image_read(filename):
   if(img.GetNumberOfComponentsPerPixel() == 1):
     tf_img_shape = tf_img_shape + [1]
 
-  if not args.sequence_prediction:
+  if not args.batch_prediction:
     tf_img_shape = [1] + tf_img_shape
 
   return img, img_np, tf_img_shape
 
 
 def image_save(img_obj, prediction):
+
   Dimension = prediction.ndim - 1
   PixelDimension = prediction.shape[-1]
   print("Dimension:", Dimension, "PixelDimension:", PixelDimension)
@@ -159,32 +220,40 @@ def image_save(img_obj, prediction):
   else:
 
     ComponentType = itk.ctype('float')
-    OutputImageType = itk.VectorImage[ComponentType, Dimension]
+    if Dimension == 1:
+      OutputImageType = itk.VectorImage[ComponentType, 2]
+    else:
+      OutputImageType = itk.VectorImage[ComponentType, Dimension]
 
     out_img = OutputImageType.New()
     out_img.SetNumberOfComponentsPerPixel(PixelDimension)
-    
-  size = itk.Size[Dimension]()
+  
+  size = itk.Size[OutputImageType.GetImageDimension()]()
   size.Fill(1)
+
+  print("Prediction shape:", prediction.shape)
   prediction_shape = list(prediction.shape[0:-1])
   prediction_shape.reverse()
+  if Dimension == 1:
+    size[1] = prediction_shape[0]
+  else:
+    for i, s in enumerate(prediction_shape):
+      size[i] = s
 
-  for i, s in enumerate(prediction_shape):
-    size[i] = s
-
-  index = itk.Index[Dimension]()
+  index = itk.Index[OutputImageType.GetImageDimension()]()
   index.Fill(0)
 
-  RegionType = itk.ImageRegion[Dimension]
+  RegionType = itk.ImageRegion[OutputImageType.GetImageDimension()]
   region = RegionType()
   region.SetIndex(index)
   region.SetSize(size)
   
   # out_img.SetRegions(img.GetLargestPossibleRegion())
   out_img.SetRegions(region)
-  out_img.SetDirection(img.GetDirection())
-  out_img.SetOrigin(img.GetOrigin())
-  out_img.SetSpacing(img.GetSpacing())
+  if(Dimension == img.GetImageDimension()):
+    out_img.SetDirection(img.GetDirection())
+    out_img.SetOrigin(img.GetOrigin())
+    out_img.SetSpacing(img.GetSpacing())
   out_img.Allocate()
 
   out_img_np = itk.GetArrayViewFromImage(out_img)
@@ -212,7 +281,7 @@ if(int(tf.__version__.split('.')[0]) > 1):
                   'input_x:0': np.reshape(img_np, tf_img_shape)
               }
           )
-          if(args.sequence_prediction):
+          if(args.batch_prediction):
             prediction = np.array(prediction)
           else:
             prediction = np.array(prediction[0])
@@ -226,6 +295,9 @@ if(int(tf.__version__.split('.')[0]) > 1):
               print("prediction", prediction, "class", class_obj[argmax])
             else:
               print("prediction", prediction)
+          elif(prediction_type == "scalar"):
+            img_obj["prediction"] = prediction.tolist()[0]
+            print("prediction", prediction)
         except Exception as e:
           print(e, file=sys.stderr)
   else:
@@ -233,10 +305,11 @@ if(int(tf.__version__.split('.')[0]) > 1):
     model.summary()
 
     for img_obj in filenames:
+      try:
         img, img_np, tf_img_shape = image_read(img_obj["img"])
         
         prediction = model.predict(np.reshape(img_np, tf_img_shape))
-        if(args.sequence_prediction):
+        if(args.batch_prediction):
           prediction = np.array(prediction)
         else:
           prediction = np.array(prediction[0])
@@ -251,17 +324,21 @@ if(int(tf.__version__.split('.')[0]) > 1):
             print("prediction", prediction, "class", class_obj[argmax])
           else:
             print("prediction", prediction)
+        elif(prediction_type == "scalar"):
+          img_obj["prediction"] = prediction.tolist()[0]
+          print("prediction", prediction)
+      except Exception as e:
+        print(e, file=sys.stderr)
 
-    if(prediction_type == "class"):
+    if(prediction_type == "class" or prediction_type == "scalar"):
       print("Writing:", args.out)
       with open(args.out, "w") as f:
-        fieldnames = ["img", "prediction"]
-        if class_obj is not None:
-          fieldnames = ["img", "prediction", "class"]
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
-        writer.writeheader()
-        for img_obj in filenames:
-          writer.writerow(img_obj)
+        if len(filenames) > 0:
+          fieldnames = list(filenames[0].keys())
+          writer = csv.DictWriter(f, fieldnames=fieldnames)
+          writer.writeheader()
+          for img_obj in filenames:
+            writer.writerow(img_obj)
 
 else:
   with tf.Session() as sess:

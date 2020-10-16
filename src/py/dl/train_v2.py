@@ -20,7 +20,7 @@ in_group.add_argument('--json', type=str, help='json file with the description o
 
 valid_param_group = parser.add_argument_group('Validation parameters')
 valid_param_group.add_argument('--json_v', type=str, help='json file with the description of the inputs/dataset for validation, generate it with tfRecords.py. The validation is done after every epoch', default=None)
-valid_param_group.add_argument('--patience', type=int, help='If the validation dataset does not improve after this many epochs, the training stops.', default=10)
+valid_param_group.add_argument('--patience', type=int, help='If the validation dataset does not improve after this many epochs, the training stops.', default=1)
 
 output_param_group = parser.add_argument_group('Output')
 output_param_group.add_argument('--out', help='Output dirname for the model', default="./out")

@@ -11,7 +11,7 @@ def Resample(img_filename, args):
 	output_size = args.size 
 	fit_spacing = args.fit_spacing
 	iso_spacing = args.iso_spacing
-	img_dimension = args.dimension
+	img_dimension = args.image_dimension
 	pixel_dimension = args.pixel_dimension
 
 	if(pixel_dimension == 1):
@@ -23,7 +23,7 @@ def Resample(img_filename, args):
 			if(pixel_dimension == 3):
 				PixelType = itk.RGBPixel[itk.UC]
 			else:
-				PixelType = itk.itk.RGBAPixel[itk.UC]
+				PixelType = itk.RGBAPixel[itk.UC]
 		else:
 			PixelType = itk.Vector[itk.F, pixel_dimension]
 		VectorImageType = itk.Image[PixelType, img_dimension]
@@ -45,7 +45,7 @@ def Resample(img_filename, args):
 	size = region.GetSize()
 
 	output_size = [si if o_si == -1 else o_si for si, o_si in zip(size, output_size)]
-	print(output_size)
+	# print(output_size)
 
 	if(fit_spacing):
 		output_spacing = [sp*si/o_si for sp, si, o_si in zip(spacing, size, output_size)]
@@ -53,25 +53,32 @@ def Resample(img_filename, args):
 		output_spacing = spacing
 
 	if(iso_spacing):
-		max_spacing = np.max(output_spacing)
-		output_spacing = np.ones_like(output_spacing)*max_spacing
+		output_spacing_filtered = [sp for si, sp in zip(args.size, output_spacing) if si != -1]
+		# print(output_spacing_filtered)
+		max_spacing = np.max(output_spacing_filtered)
+		output_spacing = [sp if si == -1 else max_spacing for si, sp in zip(args.size, output_spacing)]
+		# print(output_spacing)
 
 	if(args.spacing is not None):
 		output_spacing = args.spacing
 	
-	resampleImageFilter = ResampleType.New()
-	interpolator = InterpolatorType.New()
+	if output_size != list(img.shape[::-1][0:]):
+		print(output_size, img.shape)
+		resampleImageFilter = ResampleType.New()
+		interpolator = InterpolatorType.New()
 
-	resampleImageFilter.SetDefaultPixelValue(zeroPixel)
-	resampleImageFilter.SetOutputSpacing(output_spacing)
-	resampleImageFilter.SetOutputOrigin(img.GetOrigin())
+		resampleImageFilter.SetDefaultPixelValue(zeroPixel)
+		resampleImageFilter.SetOutputSpacing(output_spacing)
+		resampleImageFilter.SetOutputOrigin(img.GetOrigin())
 
-	resampleImageFilter.SetInterpolator(interpolator)
-	resampleImageFilter.SetSize(output_size)
-	resampleImageFilter.SetInput(img)
-	resampleImageFilter.Update()
+		resampleImageFilter.SetInterpolator(interpolator)
+		resampleImageFilter.SetSize(output_size)
+		resampleImageFilter.SetInput(img)
+		resampleImageFilter.Update()
 
-	return resampleImageFilter.GetOutput()
+		return resampleImageFilter.GetOutput()
+	else:
+		return img
 
 
 if __name__ == "__main__":
@@ -90,7 +97,7 @@ if __name__ == "__main__":
 	parser.add_argument('--spacing', nargs="+", type=float, default=None, help='Use a pre defined spacing')
 	parser.add_argument('--fit_spacing', type=bool, help='Fit spacing to output', default=False)
 	parser.add_argument('--iso_spacing', type=bool, help='Same spacing for resampled output', default=False)
-	parser.add_argument('--dimension', type=int, help='Image dimension', default=2)
+	parser.add_argument('--image_dimension', type=int, help='Image dimension', default=2)
 	parser.add_argument('--pixel_dimension', type=int, help='Pixel dimension', default=1)
 	parser.add_argument('--rgb', type=bool, help='Use RGB type pixel', default=False)
 	parser.add_argument('--ow', type=int, help='Overwrite', default=1)
@@ -114,7 +121,10 @@ if __name__ == "__main__":
 				fobj["img"] = img
 				fobj["out"] = os.path.normpath(out_dir + "/" + img.replace(args.dir, ''))
 				if args.out_ext is not None:
-					fobj["out"] = os.path.splitext(fobj["out"])[0] + args.out_ext
+					out_ext = args.out_ext
+					if out_ext[0] != ".":
+						out_ext = "." + out_ext
+					fobj["out"] = os.path.splitext(fobj["out"])[0] + out_ext
 				if not os.path.exists(os.path.dirname(fobj["out"])):
 					os.makedirs(os.path.dirname(fobj["out"]))
 				if not os.path.exists(fobj["out"]) or args.ow:
@@ -128,7 +138,10 @@ if __name__ == "__main__":
 				fobj["img"] = row[args.csv_column]
 				fobj["out"] = row[args.csv_column].replace(args.csv_root_path, args.out)
 				if args.out_ext is not None:
-					fobj["out"] = os.path.splitext(fobj["out"])[0] + args.out_ext
+					out_ext = args.out_ext
+					if out_ext[0] != ".":
+						out_ext = "." + out_ext
+					fobj["out"] = os.path.splitext(fobj["out"])[0] + out_ext
 				if not os.path.exists(os.path.dirname(fobj["out"])):
 					os.makedirs(os.path.dirname(fobj["out"]))
 				if not os.path.exists(fobj["out"]) or args.ow:
@@ -151,7 +164,7 @@ if __name__ == "__main__":
 			if args.size is not None:
 				img = Resample(fobj["img"], args)
 			else:
-				img_dimension = args.dimension
+				img_dimension = args.image_dimension
 				pixel_dimension = args.pixel_dimension
 
 				if(pixel_dimension == 1):

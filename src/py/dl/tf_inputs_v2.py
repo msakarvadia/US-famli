@@ -16,12 +16,19 @@ class TFInputs():
         self.json_filename = json_filename
         self.keys_to_features = {}
 
+        self.is_sequence = False
+        self.keys_to_features_sequence = {}
+
         with open(json_filename, "r") as f:
             self.data_description = json.load(f)
 
         if("data_keys" in self.data_description):
             for data_key in self.data_description["data_keys"]:
-                self.keys_to_features[data_key] = tf.io.FixedLenFeature((np.prod(self.data_description[data_key]["shape"])), eval(self.data_description[data_key]["type"]))
+                if "sequence" in self.data_description[data_key] and self.data_description[data_key]["sequence"]:
+                    self.is_sequence = True
+                    self.keys_to_features_sequence[data_key] = tf.io.FixedLenSequenceFeature(self.data_description[data_key]["shape"], eval(self.data_description[data_key]["type"]))
+                else:
+                    self.keys_to_features[data_key] = tf.io.FixedLenFeature(self.data_description[data_key]["shape"], eval(self.data_description[data_key]["type"]))
 
         if("enumerate" in self.data_description and "num_class" in self.data_description[self.data_description["enumerate"]]):
             self.enumerate = self.data_description["enumerate"]
@@ -56,16 +63,32 @@ class TFInputs():
 
     def read_and_decode(self, record):
         
-        parsed = tf.io.parse_single_example(record, self.keys_to_features)
-        reshaped_parsed = []
+        if self.is_sequence:
+            
+            context_parsed, sequence_parsed = tf.io.parse_single_sequence_example(record, context_features=self.keys_to_features, sequence_features=self.keys_to_features_sequence)
 
-        if("data_keys" in self.data_description):
-            for data_key in self.data_description["data_keys"]:
-                reshaped_parsed.append(tf.reshape(parsed[data_key], self.data_description[data_key]["shape"]))
+            reshaped_parsed = []
 
-            return tuple(reshaped_parsed)
+            if("data_keys" in self.data_description):
+                for data_key in self.data_description["data_keys"]:
+                    if data_key in context_parsed:
+                        reshaped_parsed.append(context_parsed[data_key])
+                    else:
+                        reshaped_parsed.append(sequence_parsed[data_key])
 
-        return parsed
+                return tuple(reshaped_parsed)
+
+        else:
+            parsed = tf.io.parse_single_example(record, self.keys_to_features)
+            reshaped_parsed = []
+
+            if("data_keys" in self.data_description):
+                for data_key in self.data_description["data_keys"]:
+                    reshaped_parsed.append(parsed[data_key])
+
+                return tuple(reshaped_parsed)
+
+            return parsed
 
     def tf_inputs(self):
 
@@ -78,9 +101,15 @@ class TFInputs():
 
             dataset = tf.data.TFRecordDataset(tfrecords_arr)
             dataset = dataset.map(self.read_and_decode)
+            
+            if self.is_sequence:
+                dataset = dataset.padded_batch(self.batch_size)
+            else:
+                dataset = dataset.batch(self.batch_size)
+
             if(self.buffer_size > 0):
                 dataset = dataset.shuffle(buffer_size=self.buffer_size)
-            dataset = dataset.batch(self.batch_size)
+
 
             return dataset
 
