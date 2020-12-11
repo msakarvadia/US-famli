@@ -39,6 +39,7 @@ train_param_group.add_argument('--batch_size', help='Batch size for evaluation',
 train_param_group.add_argument('--num_epochs', help='Number of epochs', type=int, default=10)
 train_param_group.add_argument('--buffer_size', help='Shuffle buffer size', type=int, default=0)
 train_param_group.add_argument('--summary_writer', help='Number of steps to write summary', type=int, default=100)
+train_param_group.add_argument('--gpu', help='GPU number for training', type=int, default=0)
 
 continue_param_group = parser.add_argument_group('Continue training', 'Use a previously saved model to continue the training.')
 continue_param_group.add_argument('--in_model', help='Input model name', default=None)
@@ -79,107 +80,112 @@ buffer_size = args.buffer_size
 
 save_model = args.save_model
 
-tf_inputs = TFInputs(json_filename=json_filename, batch_size=batch_size, buffer_size=buffer_size)
+print("Using gpu:", args.gpu)
+with tf.device('/device:GPU:' + str(args.gpu)):
 
-NN = importlib.import_module("nn_v2." + neural_network).NN
-nn = NN(tf_inputs, args)
+	tf_inputs = TFInputs(json_filename=json_filename, batch_size=batch_size, buffer_size=buffer_size)
 
-use_validate = False
-global_valid_metric = 0
-global_valid_metric_patience = 0
+	NN = importlib.import_module("nn_v2." + neural_network).NN
+	nn = NN(tf_inputs, args)
 
-if json_filename_validation is not None:
-	if "valid_step" not in dir(NN):
-		raise "valid_step function not implemented. It should return true or false if it improves the evaluation"
-	use_validate = True
-	tf_inputs_v = TFInputs(json_filename=json_filename_validation, batch_size=batch_size, buffer_size=0)
-	dataset_validation = tf_inputs_v.tf_inputs()
+	use_validate = False
+	global_valid_metric = 0
+	global_valid_metric_patience = 0
 
-if(neural_network2):
-	NN2 = importlib.import_module("nn_v2." + neural_network2).NN
-	nn2 = NN2(tf_inputs, args)
-	if(in_model2):
-		print("loading nn2:", in_model2)
-		latest = tf.train.latest_checkpoint(in_model2)
-		nn2.load_weights(latest)
+	if json_filename_validation is not None:
+		if "valid_step" not in dir(NN):
+			raise "valid_step function not implemented. It should return true or false if it improves the evaluation"
+		use_validate = True
+		tf_inputs_v = TFInputs(json_filename=json_filename_validation, batch_size=batch_size, buffer_size=0)
+		dataset_validation = tf_inputs_v.tf_inputs()
 
-	nn.set_nn2(nn2)
-	
+	if(neural_network2):
+		NN2 = importlib.import_module("nn_v2." + neural_network2).NN
+		nn2 = NN2(tf_inputs, args)
+		if(in_model2):
+			print("loading nn2:", in_model2)
+			latest = tf.train.latest_checkpoint(in_model2)
+			nn2.load_weights(latest)
 
-# optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
-# model = nn.get_symbolic_model()
-# model.compile(optimizer, loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True), metrics=['accuracy'])
+		nn.set_nn2(nn2)
 
-# now = datetime.now()
+	if(in_model2_svf):
+		nn2 = tf.keras.models.load_model(in_model2_svf)
+		nn2.summary()
+		nn.set_nn2(nn2)
+		
 
-# checkpoint_path = os.path.join(outvariablesdirname, modelname)
-# summary_path = os.path.join(outvariablesdirname, modelname   + "-" + now.strftime("%Y%m%d-%H%M%S"))
+	# optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
+	# model = nn.get_symbolic_model()
+	# model.compile(optimizer, loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True), metrics=['accuracy'])
 
-# # history = model.fit(dataset, epochs=num_epochs, callbacks=nn.callbacks(checkpoint_path, summary_path))
+	# now = datetime.now()
 
-if(in_model):
-	latest = tf.train.latest_checkpoint(in_model)
-	print("loading:", latest)
-	nn.load_weights(latest)
+	# checkpoint_path = os.path.join(outvariablesdirname, modelname)
+	# summary_path = os.path.join(outvariablesdirname, modelname   + "-" + now.strftime("%Y%m%d-%H%M%S"))
 
-if(save_model):
-	print("Saving model to:", save_model)
-	nn.save_model(save_model)
-	with open(args.json, "r") as r:
-		with open(os.path.join(save_model, "data_description.json"), "w") as w:
-			w.write(json.dumps(json.load(r)))
-else:
-	summary_writer = tf.summary.create_file_writer(os.path.join(outvariablesdirname, modelname + "-" + str(datetime.now())))
-	checkpoint_path = os.path.join(outvariablesdirname, modelname)
+	# # history = model.fit(dataset, epochs=num_epochs, callbacks=nn.callbacks(checkpoint_path, summary_path))
 
-	ckpt = nn.get_checkpoint_manager()
+	if(in_model):
+		latest = tf.train.latest_checkpoint(in_model)
+		print("loading:", latest)
+		nn.load_weights(latest)
 
-	checkpoint_manager = tf.train.CheckpointManager(ckpt, checkpoint_path, max_to_keep=3, checkpoint_name=modelname)
+	if(save_model):
+		print("Saving model to:", save_model)
+		nn.save_model(save_model)
+		with open(args.json, "r") as r:
+			with open(os.path.join(save_model, "data_description.json"), "w") as w:
+				w.write(json.dumps(json.load(r)))
+	else:
 
-	if use_validate:
-		checkpoint_path_valid = os.path.join(outvariablesdirname, modelname + "_valid")
-		ckpt_valid = nn.get_checkpoint_manager()
-		checkpoint_manager_valid = tf.train.CheckpointManager(ckpt_valid, checkpoint_path_valid, max_to_keep=3, checkpoint_name=modelname + "_min")
+		summary_writer = tf.summary.create_file_writer(os.path.join(outvariablesdirname, modelname + "-" + str(datetime.now())))
+		checkpoint_path = os.path.join(outvariablesdirname, modelname)
 
-	with summary_writer.as_default():
+		ckpt = nn.get_checkpoint_manager()
 
-		step = args.in_step
-		for epoch in range(args.in_epoch, num_epochs):
-			start = time.time()
+		checkpoint_manager = tf.train.CheckpointManager(ckpt, checkpoint_path, max_to_keep=3, checkpoint_name=modelname)
 
-			dataset = tf_inputs.tf_inputs()
+		if use_validate:
+			checkpoint_path_valid = os.path.join(outvariablesdirname, modelname + "_valid")
+			ckpt_valid = nn.get_checkpoint_manager()
+			checkpoint_manager_valid = tf.train.CheckpointManager(ckpt_valid, checkpoint_path_valid, max_to_keep=3, checkpoint_name=modelname + "_min")
 
-			for image_batch in dataset:
+		with summary_writer.as_default():
 
-				tr_strep = nn.train_step(image_batch)
-				step+=1
+			step = args.in_step
+			for epoch in range(args.in_epoch, num_epochs):
+				start = time.time()
 
-				if step % args.summary_writer == 0:
-					nn.summary(image_batch, tr_strep, step)
-					summary_writer.flush()
+				dataset = tf_inputs.tf_inputs()
 
-				if step % 1000 == 0:
+				for image_batch in dataset:
+
+					tr_strep = nn.train_step(image_batch)
+					step+=1
+
+					if step % args.summary_writer == 0:
+						nn.summary(image_batch, tr_strep, step)
+						summary_writer.flush()
+
+				print ('Time for epoch {} is {} sec'.format(epoch + 1, time.time()-start))
+
+				if use_validate:
+					print("Start evaluation")
+					if nn.valid_step(dataset_validation):
+						global_valid_metric_patience = 0
+						ckpt_save_path_valid = checkpoint_manager_valid.save()
+						print("Validation metric improved!")
+						print("Saving checkpoint validation", ckpt_save_path_valid)					
+					else:
+						global_valid_metric_patience += 1
+						print("Validation did not improve:", global_valid_metric_patience)
+
+					if global_valid_metric_patience >= patience_validation:
+						break
+				else: 
 					ckpt_save_path = checkpoint_manager.save()
 					print("Saving checkpoint", ckpt_save_path)
 
-			print ('Time for epoch {} is {} sec'.format(epoch + 1, time.time()-start))
-
-			if use_validate:
-				print("Start evaluation")
-				if nn.valid_step(dataset_validation):
-					global_valid_metric_patience = 0
-					ckpt_save_path_valid = checkpoint_manager_valid.save()
-					print("Validation metric improved!")
-					print("Saving checkpoint validation", ckpt_save_path_valid)					
-				else:
-					global_valid_metric_patience += 1
-					print("Validation did not improve:", global_valid_metric_patience)
-
-				if global_valid_metric_patience >= patience_validation:
-					break
-
-
-
-
-	ckpt_save_path = checkpoint_manager.save()
-	print("Saving last checkpoint", ckpt_save_path)
+		ckpt_save_path = checkpoint_manager.save()
+		print("Saving last checkpoint", ckpt_save_path)

@@ -94,21 +94,23 @@ def main(args):
 	if(not os.path.exists(args.out) or not os.path.isdir(args.out)):
 		os.makedirs(args.out)
 
-	if(args.bins_sample_weight is not None and args.bins is not None):
+	if(args.bins_column is not None and args.bins is not None):
 		y_train = []
 
 		for fobj in csv_rows:
-			y_train.append(float(fobj[args.bins_sample_weight]))
+			y_train.append(float(fobj[args.bins_column]))
 
 		hist, bin_edges = np.histogram(y_train, bins=args.bins, range=args.bins_range)
 		y_train = np.digitize(y_train, bin_edges)
 
-		unique_classes = np.unique(y_train)
+		unique_classes = np.sort(np.unique(y_train))
 		class_weights = np.array(class_weight.compute_class_weight('balanced', unique_classes, y_train))
 
 		unique_classes_obj = {}
+		unique_classes_obj_str = {}
 		for uc, cw in zip(unique_classes, class_weights):
 			unique_classes_obj[uc] = cw
+			unique_classes_obj_str[str(uc)] = cw
 		
 		for fobj, y in zip(csv_rows, y_train):
 			fobj["class_weights"] = unique_classes_obj[y]
@@ -116,6 +118,7 @@ def main(args):
 		obj["class_weights"] = {}
 		obj["class_weights"]["shape"] = [1]
 		obj["class_weights"]["type"] = "tf.float32"
+		obj["class_weights"]["weights"] = unique_classes_obj_str
 		obj["data_keys"].append("class_weights")
 
 	elif(args.enumerate):
@@ -224,6 +227,30 @@ def main(args):
 					
 					img_np = itk.GetArrayViewFromImage(img).astype(float)
 
+					# Put the shape of the image in the json object if it does not exists. This is done for global information
+					img_shape = list(img_np.shape)
+					if(img_shape[0] == 1):
+						# If the first component is 1 we remove it. It means that is a 2D image but was saved as 3D
+						img_shape = img_shape[1:]
+
+					if(args.image_dimension == 1):
+						img_shape = [s for s in img_shape if s != 1]
+
+					# This is the number of channels, if the number of components is 1, it is not included in the image shape
+					# If it has more than one component, it is included in the shape, that's why we have to add the 1
+					if(img.GetNumberOfComponentsPerPixel() == 1):
+						img_shape = img_shape + [1]
+
+					img_np = img_np.reshape(img_shape)
+
+					if args.flip_x:
+						print("Flip x")
+						img_np = np.flip(img_np, axis=0)
+
+					if args.flip_y:
+						print("Flip y")
+						img_np = np.flip(img_np, axis=1)
+
 					if(args.image_dimension == 1):
 						img_np = img_np.reshape([s for s in img_np.shape if s != 1])
 
@@ -235,17 +262,6 @@ def main(args):
 						feature_list[key] = tf.train.FeatureList(feature=[_float_feature(frame.reshape(-1).tolist()) for frame in img_np])
 					else:
 						feature[key] =  _float_feature(img_np.reshape(-1).tolist())
-
-					# Put the shape of the image in the json object if it does not exists. This is done for global information
-					img_shape = list(img_np.shape)
-					if(img_shape[0] == 1):
-						# If the first component is 1 we remove it. It means that is a 2D image but was saved as 3D
-						img_shape = img_shape[1:]
-
-					# This is the number of channels, if the number of components is 1, it is not included in the image shape
-					# If it has more than one component, it is included in the shape, that's why we have to add the 1
-					if(img.GetNumberOfComponentsPerPixel() == 1):
-						img_shape = img_shape + [1]
 
 					if(not "shape" in obj[key]):
 						print("Shape", key, img_shape)
@@ -334,9 +350,11 @@ def main(args):
 			writer.close()
 
 		except Exception as e:
-			print("Error converting to tfRecord", e, file=sys.stderr)
+			print('\033[91m', "Error converting to tfRecord", e, '\033[0m', file=sys.stderr)
 			print(obj, file=sys.stderr)
 			print(fobj, file=sys.stderr)
+			if args.exit_on_error:
+				quit()
 
 	obj['tfrecords'] = os.path.basename(args.out.rstrip(os.sep))
 	
@@ -378,15 +396,18 @@ if __name__ == "__main__":
 	parser.add_argument('--scale_intensity', type=float, default=1.0, help="Scale image intensity by this factor before storing as tfRecord")
 	parser.add_argument('--scale_intensity_columns', type=str, nargs="+", default=None, help="Column names of images that should be rescaled before storing")
 	parser.add_argument('--enumerate', type=str, default=None, help='Column name in CSV. If you are storing a label or category to perform a classification task. If it is an image, it will read the FIRST image in your csv and extract the existing labels.')
-	parser.add_argument('--bins', type=int, default=None, help='Use a histogram with a defined number of bins to create the different classes')
+	parser.add_argument('--bins_column', type=str, default=None, help='Column name in CSV. If you want to generate bins to compute weights')
+	parser.add_argument('--bins', type=int, default=None, help='Number of bins. Use a histogram with a defined number of bins to create the different classes')
 	parser.add_argument('--bins_range', type=float, nargs="+", default=None, help='Bins range')
-	parser.add_argument('--bins_sample_weight', type=str, default=None, help='Column name in CSV. If you want to generate histogram bins and compute a weight')
 	parser.add_argument('--slice', type=bool, default=False, help="If it is a 3D image, saves slices in all the major axis and the stores them as tfRecords")
 	parser.add_argument('--out', type=str, default="./out", help="Output directory")
 	parser.add_argument('--split', type=float, default=0, help="Split the data for evaluation. [0-1], 0=no split")
 	parser.add_argument('--image_dimension', type=int, default=-1, help="Set image dimension, by default it will try to guess it but you can set this here. Or use it when a type is not wrapped. Ex. RGB double, it will read the image as a float vector image")
 	parser.add_argument('--pixel_dimension', type=int, default=-1, help="Set pixel dimension, by default it will try to guess it but you can set this here.")
+	parser.add_argument('--flip_x', type=bool, default=False, help="Flip image in the x axis")
+	parser.add_argument('--flip_y', type=bool, default=False, help="Flip image in the y axis")
 	parser.add_argument('--sequence', type=bool, default=0, help="If the images are sequences and have variable length set this flag")
+	parser.add_argument('--exit_on_error', type=int, default=0, help="Exit if error is found when writing a tfRecord")
 
 	args = parser.parse_args()
 

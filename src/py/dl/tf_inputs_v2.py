@@ -17,6 +17,7 @@ class TFInputs():
         self.keys_to_features = {}
 
         self.is_sequence = False
+        self.shuffle_sequence = False
         self.keys_to_features_sequence = {}
 
         with open(json_filename, "r") as f:
@@ -25,6 +26,9 @@ class TFInputs():
         if("data_keys" in self.data_description):
             for data_key in self.data_description["data_keys"]:
                 if "sequence" in self.data_description[data_key] and self.data_description[data_key]["sequence"]:
+                    if "shuffle" in self.data_description[data_key] and self.data_description[data_key]["shuffle"]:
+                        print("Shuffling sequence!")
+                        self.shuffle_sequence = True
                     self.is_sequence = True
                     self.keys_to_features_sequence[data_key] = tf.io.FixedLenSequenceFeature(self.data_description[data_key]["shape"], eval(self.data_description[data_key]["type"]))
                 else:
@@ -74,7 +78,10 @@ class TFInputs():
                     if data_key in context_parsed:
                         reshaped_parsed.append(context_parsed[data_key])
                     else:
-                        reshaped_parsed.append(sequence_parsed[data_key])
+                        if self.shuffle_sequence: 
+                            reshaped_parsed.append(tf.random.shuffle(sequence_parsed[data_key]))
+                        else:
+                            reshaped_parsed.append(sequence_parsed[data_key])
 
                 return tuple(reshaped_parsed)
 
@@ -103,7 +110,7 @@ class TFInputs():
             dataset = dataset.map(self.read_and_decode)
             
             if self.is_sequence:
-                dataset = dataset.padded_batch(self.batch_size)
+                dataset = dataset.padded_batch(self.batch_size, padding_values=-1.0)
             else:
                 dataset = dataset.batch(self.batch_size)
 
