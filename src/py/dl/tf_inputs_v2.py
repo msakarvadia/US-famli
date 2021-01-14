@@ -40,6 +40,10 @@ class TFInputs():
         else:
             self.num_classes = 2
 
+        self.batch_size = batch_size
+        self.buffer_size = buffer_size
+
+    def get_tf_records(self):
         tfrecords_arr = []
         tfrecords_dir = os.path.join(os.path.dirname(self.json_filename), self.data_description["tfrecords"], '**/*.tfrecord')
         print("Reading tfRecords from", tfrecords_dir)
@@ -48,8 +52,8 @@ class TFInputs():
         print("tfRecords found:", len(tfrecords_arr))
 
         self.tfrecords_arr = tfrecords_arr
-        self.batch_size = batch_size
-        self.buffer_size = buffer_size
+
+        return self.tfrecords_arr
 
 
     def get_data_description(self):
