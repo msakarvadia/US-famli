@@ -175,7 +175,7 @@ def image_read(filename):
     else:
       if(args.pixel_dimension != -1):
         ImageType = itk.Image[itk.Vector[itk.F, args.pixel_dimension], args.image_dimension]
-      if(args.pixel_dimension == 1):
+      elif(args.pixel_dimension == 1):
         ImageType = itk.Image[itk.F, args.image_dimension]
       else:
         ImageType = itk.VectorImage[itk.F, args.image_dimension]
