@@ -10,6 +10,72 @@ import os
 import glob
 import sys
 
+class Attention(layers.Layer):
+    def __init__(self, units, name='attention'):
+        super(Attention, self).__init__()
+
+        self.projection = layers.Dense(units, activation='tanh', use_bias=False, name=name + "_projection")
+
+        self.wt = layers.Dense(units, activation=None, use_bias=False, name=name + "_wt")
+        self.wx = layers.Dense(units, activation=None, use_bias=False, name=name + "_wx")
+
+        self.add = layers.Add()
+        self.add_act = layers.Activation('tanh')
+
+        self.wa = layers.Dense(1, activation=None, use_bias=False, name=name + "_wa")
+        self.softmax = layers.Softmax(axis=1)
+
+    def call(self, x0):
+
+        x = self.projection(x0)
+
+        attention_wt = self.wt(x)
+        attention_wx = self.wx(x)
+
+        attention = self.add([attention_wt, attention_wx])
+        attention = self.add_act(attention)
+        
+        attention_wa = self.wa(attention)
+        attention_scores = self.softmax(attention_wa)
+
+        return tf.reduce_sum(tf.math.multiply(x, attention_scores), axis=1)
+
+class BahdanauAttention(tf.keras.layers.Layer):
+  def __init__(self, units):
+    super(BahdanauAttention, self).__init__()
+    self.W1 = tf.keras.layers.Dense(units)
+    self.W2 = tf.keras.layers.Dense(units)
+    self.V = tf.keras.layers.Dense(1)
+    # self.k = k
+
+  def call(self, query, values):
+    # query hidden state shape == (batch_size, hidden size)
+    # query_with_time_axis shape == (batch_size, 1, hidden size)
+    # values shape == (batch_size, max_len, hidden size)
+    # we are doing this to broadcast addition along the time axis to calculate the score
+    query_with_time_axis = tf.expand_dims(query, 1)
+
+    # score shape == (batch_size, max_length, 1)
+    # we get 1 at the last axis because we are applying score to self.V
+    # the shape of the tensor before applying self.V is (batch_size, max_length, units)
+    score = self.V(tf.nn.tanh(
+        self.W1(query_with_time_axis) + self.W2(values)))
+
+    # min_score = tf.reduce_min(tf.math.top_k(tf.reshape(score, [-1, tf.shape(score)[1]]), k=self.k, sorted=False, name=None)[0], axis=1, keepdims=True)
+    # min_score = tf.reshape(min_score, [-1, 1, 1])
+    # score_mask = tf.greater_equal(score, min_score)
+    # score_mask = tf.cast(score_mask, tf.float32)
+    # attention_weights = tf.multiply(tf.exp(score), score_mask) / tf.reduce_sum(tf.multiply(tf.exp(score), score_mask), axis=1, keepdims=True)
+
+    # attention_weights shape == (batch_size, max_length, 1)
+    attention_weights = tf.nn.softmax(score, axis=1)
+
+    # context_vector shape after sum == (batch_size, hidden_size)
+    context_vector = attention_weights * values
+    context_vector = tf.reduce_sum(context_vector, axis=1)
+
+    return context_vector, attention_weights
+
 class NN(tf.keras.Model):
 
     def __init__(self, tf_inputs, args):
@@ -40,10 +106,13 @@ class NN(tf.keras.Model):
 
         self.drop_prob = drop_prob
 
-        self.lstm_class = self.make_lstm_network()
-        self.lstm_class.summary()
+        self.gru_class = self.make_gru_network()
+        self.gru_class.summary()
         
-        self.classification_loss = tf.keras.losses.SparseCategoricalCrossentropy()
+        # self.classification_loss = tf.keras.losses.SparseCategoricalCrossentropy()
+        label_smoothing = 0
+        # self.classification_loss = tf.keras.losses.CategoricalCrossentropy(label_smoothing=label_smoothing)
+        self.classification_loss = tf.keras.losses.BinaryCrossentropy()
             
         self.metrics_acc = tf.keras.metrics.Accuracy()
 
@@ -54,47 +123,39 @@ class NN(tf.keras.Model):
 
         self.optimizer = tf.keras.optimizers.Adam(lr)
         
-        self.metrics_validation = tf.keras.metrics.SparseCategoricalCrossentropy()
+        # self.metrics_validation = tf.keras.metrics.SparseCategoricalCrossentropy()
+        # self.metrics_validation = tf.keras.metrics.CategoricalCrossentropy(label_smoothing=label_smoothing)
+        self.metrics_validation = tf.keras.metrics.BinaryCrossentropy()
         self.metrics_acc_validation = tf.keras.metrics.Accuracy()
         self.global_validation_metric = float("inf")
         self.global_validation_step = args.in_epoch
 
-    def make_lstm_network(self):
-        model = tf.keras.Sequential()
+    def make_gru_network(self):
+
+        x0 = tf.keras.Input(shape=[None, self.num_channels])
+
+        x = layers.Masking(mask_value=-1.0)(x0)
+
+        x = layers.GaussianNoise(0.1)(x)
+
+        x = layers.BatchNormalization()(x)
         
-        model.add(layers.InputLayer(input_shape=[None, self.num_channels]))
-        model.add(layers.GRU(units=2048, activation='tanh', use_bias=False, name="block15_gru"))
+        x_e, x_h_fwd, x_h_bwd = layers.Bidirectional(layers.GRU(units=512, activation='tanh', use_bias=False, kernel_initializer="glorot_normal", dropout=self.drop_prob, return_sequences=True, return_state=True), name="bi_gru")(x)
+        x_e = layers.Dropout(self.drop_prob)(x_e)
+        x_h_fwd = layers.Dropout(self.drop_prob)(x_h_fwd)
+        x_h_bwd = layers.Dropout(self.drop_prob)(x_h_bwd)
 
-        model.add(layers.Dense(self.num_classes, activation='softmax', name='predictions'))
+        x_a_fwd, w_a_fwd = BahdanauAttention(1024)(x_h_fwd, x_e)
+        x_a_bwd, w_a_bwd = BahdanauAttention(1024)(x_h_bwd, x_e)
 
-        return model
-        
-        # model.add(layers.GRU(units=2048, activation='tanh', use_bias=False, name="block15_gru", return_sequences=True))
-        # model.add(layers.GlobalAveragePooling1D())
+        x = tf.concat([x_h_fwd, x_a_fwd, x_h_bwd, x_a_bwd], axis=-1)
 
-        # model = tf.keras.Sequential()
-        # model.add(layers.InputLayer(input_shape=[None, self.num_channels]))
-        # model.add(layers.GRU(units=1024, activation='tanh', use_bias=False, name="block15_gru", return_sequences=True))
-        # model.add(layers.GlobalMaxPooling1D())
-        
-        # model.add(layers.Dense(self.num_classes, activation='softmax', name='predictions'))
+        x = layers.Dense(self.num_classes, activation='softmax', use_bias=False, name='predictions')(x)
 
-        # return model
-
-        # x0 = tf.keras.Input(shape=[None, self.num_channels])
-
-        # x, st = layers.GRU(units=self.num_channels, activation='tanh', use_bias=False, name="block15_gru", return_sequences=True, return_state=True)(x0)
-        # x, st = layers.GRU(units=self.num_channels, activation='tanh', use_bias=False, name="block16_gru", return_sequences=True, return_state=True)(x, initial_state=st)
-        # x = layers.GRU(units=self.num_channels, activation='tanh', use_bias=False, name="block17_gru")(x, initial_state=st)
-
-        # x = layers.Dense(self.num_classes, activation='softmax', name='predictions')(x)
-
-        # return tf.keras.Model(inputs=x0, outputs=x)
+        return tf.keras.Model(inputs=x0, outputs=x)
 
 
-
-
-    @tf.function
+    @tf.function(experimental_relax_shapes=True)
     def train_step(self, train_tuple):
         
         images = train_tuple[0]
@@ -106,9 +167,9 @@ class NN(tf.keras.Model):
 
         with tf.GradientTape() as tape:
             
-            images = tf.map_fn(lambda x: tf.random.shuffle(x), images)
-            x_c = self.lstm_class(images, training=True)
-            loss = self.classification_loss(labels, x_c, sample_weight=sample_weight)
+            # images = tf.map_fn(lambda x: tf.random.shuffle(x), images)
+            x_c = self.gru_class(images, training=True)
+            loss = self.classification_loss(tf.reshape(tf.one_hot(tf.cast(labels, tf.int32), self.num_classes), tf.shape(x_c)), x_c, sample_weight=sample_weight)
 
             var_list = self.trainable_variables
 
@@ -123,12 +184,17 @@ class NN(tf.keras.Model):
             images = valid_tuple[0]
             labels = valid_tuple[self.enumerate_index]
             
-            x_c = self.lstm_class(images, training=False)
+            x_c = self.gru_class(images, training=False)
+
+            # self.metrics_validation.update_state(labels, x_c)
             
-            self.metrics_validation.update_state(labels, x_c)
+            sample_weight = None
+            if self.class_weights_index != -1:
+                sample_weight = valid_tuple[self.class_weights_index]
+            self.metrics_validation.update_state(tf.reshape(tf.one_hot(tf.cast(labels, tf.int32), self.num_classes), tf.shape(x_c)), x_c, sample_weight=sample_weight)
 
             prediction = tf.argmax(x_c, axis=1)
-            self.metrics_acc_validation.update_state(labels, prediction)
+            self.metrics_acc_validation.update_state(labels, prediction, sample_weight=sample_weight)
 
         validation_result = self.metrics_validation.result()
         acc_result = self.metrics_acc_validation.result()
@@ -146,27 +212,32 @@ class NN(tf.keras.Model):
 
     def get_checkpoint_manager(self):
         return tf.train.Checkpoint(
-            lstm_class=self.lstm_class,
+            gru_class=self.gru_class,
             optimizer=self.optimizer)
 
-    def summary(self, images, tr_step, step):
-        labels = tf.reshape(images[1], [-1])
+    def summary(self, train_tuple, tr_step, step):
+        
+        sample_weight = None
+        if self.class_weights_index != -1:
+            sample_weight = train_tuple[self.class_weights_index]
+
+        labels = tf.reshape(train_tuple[1], [-1])
 
         loss = tr_step[0]
         prediction = tf.argmax(tr_step[1], axis=1)
 
-        self.metrics_acc.update_state(labels, prediction)
+        self.metrics_acc.update_state(labels, prediction, sample_weight=sample_weight)
         acc_result = self.metrics_acc.result()
 
         print("step", step, "loss", loss.numpy(), "acc", acc_result.numpy())
         print(labels.numpy())
         print(prediction.numpy())
         
-        tf.summary.image('features', tf.reshape(images[0], tf.shape(images[0]).numpy().tolist() + [1])/255, step=step)
+        tf.summary.image('features', tf.reshape(train_tuple[0], tf.shape(train_tuple[0]).numpy().tolist() + [1])/255, step=step)
         tf.summary.scalar('loss', loss, step=step)
         tf.summary.scalar('loss', loss, step=step)
         tf.summary.scalar('accuracy', acc_result, step=step)
 
     def save_model(self, save_model):
-        self.lstm_class.summary()
-        self.lstm_class.save(save_model)
+        self.gru_class.summary()
+        self.gru_class.save(save_model)
