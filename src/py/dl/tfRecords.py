@@ -131,11 +131,11 @@ def main(args):
 		
 		row_keys.append('class_weights')
 
-		obj[args.enumerate]["num_class"] = np.shape(unique_classes)[0]
-		obj[args.enumerate]["class"]["weights"] = unique_classes_obj_str
-		obj[args.enumerate]["class"]["enumerate"] = {}
+		obj[args.bins_column]["num_class"] = np.shape(unique_classes)[0]
+		obj[args.bins_column]["class"]["weights"] = unique_classes_obj_str
+		obj[args.bins_column]["class"]["enumerate"] = {}
 		for i, name in enumerate(unique_classes):
-			obj[args.enumerate]["class"]["enumerate"][str(name)] = i
+			obj[args.bins_column]["class"]["enumerate"][str(name)] = i
 
 	elif(args.enumerate):
 		obj["enumerate"] = args.enumerate
