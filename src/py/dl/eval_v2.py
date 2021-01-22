@@ -43,7 +43,8 @@ if(eval_type == "class"):
 	class_names = tf_inputs.get_class_names()
 	print(class_names)
 
-dataset = tf_inputs.tf_inputs(batch_size=1, buffer_size=100)
+tf_inputs.get_tf_records()
+dataset = tf_inputs.tf_inputs()
 
 model = tf.keras.models.load_model(model_path, custom_objects={'tf': tf})
 model.summary()
@@ -122,6 +123,8 @@ def plot_confusion_matrix(cm, classes,
   plt.xlabel('Predicted label')
   plt.tight_layout()
 
+  return cm
+
 if(eval_type == "class"):
   # Compute confusion matrix
 
@@ -130,15 +133,25 @@ if(eval_type == "class"):
 
   # Plot non-normalized confusion matrix
   fig = plt.figure()
-  plot_confusion_matrix(cnf_matrix, classes=class_names, title='Confusion matrix, without normalization')
+  cm = plot_confusion_matrix(cnf_matrix, classes=class_names, title='Confusion matrix, without normalization')
   confusion_filename = os.path.splitext(json_tf_records)[0] + "_confusion.png"
   fig.savefig(confusion_filename)
+  confusion_filename = os.path.splitext(json_tf_records)[0] + "_confusion.json"
+  cm_dict = {}
+  cm_dict["cm"] = cm.tolist()
+  with open(confusion_filename, "w") as f:
+    f.write(json.dumps(cm_dict))
+
   # Plot normalized confusion matrix
   fig2 = plt.figure()
-  plot_confusion_matrix(cnf_matrix, classes=class_names, normalize=True, title='Normalized confusion matrix')
-
+  cm = plot_confusion_matrix(cnf_matrix, classes=class_names, normalize=True, title='Normalized confusion matrix')
   norm_confusion_filename = os.path.splitext(json_tf_records)[0] + "_norm_confusion.png"
   fig2.savefig(norm_confusion_filename)
+  norm_confusion_filename = os.path.splitext(json_tf_records)[0] + "_norm_confusion.json"
+  cm_dict = {}
+  cm_dict["cm"] = cm.tolist()
+  with open(norm_confusion_filename, "w") as f:
+    f.write(json.dumps(cm_dict))
 
 elif(eval_type == "segmentation"):
 
