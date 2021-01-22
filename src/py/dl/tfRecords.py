@@ -129,13 +129,13 @@ def main(args):
 
 		df["class_weights"] = class_weights
 		
-		obj["class_weights"] = {}
-		obj["class_weights"]["shape"] = [1]
-		obj["class_weights"]["type"] = "tf.float32"
-		obj["class_weights"]["weights"] = unique_classes_obj_str
-		
 		row_keys.append('class_weights')
-		obj["data_keys"] = row_keys
+
+		obj[args.enumerate]["num_class"] = np.shape(unique_classes)[0]
+		obj[args.enumerate]["class"]["weights"] = unique_classes_obj_str
+		obj[args.enumerate]["class"]["enumerate"] = {}
+		for i, name in enumerate(unique_classes):
+			obj[args.enumerate]["class"]["enumerate"][str(name)] = i
 
 	elif(args.enumerate):
 		obj["enumerate"] = args.enumerate
@@ -158,10 +158,13 @@ def main(args):
 			class_weights.append(unique_classes_obj[y])
 
 		df["class_weights"] = class_weights
+		
 		obj[args.enumerate]["num_class"] = np.shape(unique_classes)[0]
-		obj[args.enumerate]["class"] = unique_classes_obj_str
+		obj[args.enumerate]["class"]["weights"] = unique_classes_obj_str
+		obj[args.enumerate]["class"]["enumerate"] = {}
+		for i, name in enumerate(unique_classes):
+			obj[args.enumerate]["class"]["enumerate"][str(name)] = i
 		row_keys.append('class_weights')
-
 
 		# #This is the number of classes
 		# num_class = 0
@@ -283,13 +286,26 @@ def main(args):
 
 					img_np = img_np.reshape(img_shape)
 
+					# if args.flip_x:
+					# 	print("Flip x")
+					# 	img_np = np.flip(img_np, axis=0)
+
+					# if args.flip_y:
+					# 	print("Flip y")
+					# 	img_np = np.flip(img_np, axis=1)
 					if args.flip_x:
-						print("Flip x")
-						img_np = np.flip(img_np, axis=0)
+						print("Flip x:")
+						if img.GetImageDimension() == 3:
+							img_np = np.flip(img_np, axis=2)
+						else:
+							img_np = np.flip(img_np, axis=1)
 
 					if args.flip_y:
 						print("Flip y")
-						img_np = np.flip(img_np, axis=1)
+						if img.GetImageDimension() == 3:
+							img_np = np.flip(img_np, axis=1)
+						else:
+							img_np = np.flip(img_np, axis=0)
 
 					if(args.image_dimension == 1):
 						img_np = img_np.reshape([s for s in img_np.shape if s != 1])
@@ -311,7 +327,6 @@ def main(args):
 							obj[key]["sequence"] = True
 							print("sequence", obj[key]["shape"])
 
-
 					if(not "max" in obj[key]):
 						obj[key]["max"] = float(np.max(img_np))
 					else:
@@ -329,25 +344,19 @@ def main(args):
 					# If its an enumeration, it will save the class enumeration as int. If is a label map, it never reached this step
 					# because it was read as an image. 
 					class_name = row[key]
-					class_number = int(obj[args.enumerate]["class"][str(class_name)])
+					class_number = int(obj[args.enumerate]["class"]["enumerate"][str(class_name)])
 
 					feature[key] = _int64_feature(class_number)
 
-					if "class_weights" in obj[args.enumerate]:
-						cw = float(obj[args.enumerate]["class_weights"][class_number])
+					if "weights" in obj[args.enumerate]["class"]:
+						cw = float(obj[args.enumerate]["class"]["weights"][str(class_name)])
+						print(class_name, class_number, cw)
 						feature["class_weights"] = _float_feature(cw)
-						if not "class_weights" in obj:
-							obj["class_weights"] = {}
-							obj["class_weights"]["shape"] = [1]
-							obj["class_weights"]["type"] = "tf.float32"
-							obj["data_keys"].append("class_weights")
-
 					if(not "shape" in obj[key]):
 						obj[key]["shape"] = [1]
 
 					if(not "type" in obj[key]):
 						obj[key]["type"] = "tf.int64"
-
 				else:
 					try:
 						# If the previous failed, try converting it to float
