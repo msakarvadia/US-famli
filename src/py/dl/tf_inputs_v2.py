@@ -62,7 +62,7 @@ class TFInputs():
     def get_class_names(self):
         data_description = self.data_description
         if("enumerate" in data_description):
-            class_dict = data_description[data_description["enumerate"]]["class"]
+            class_dict = data_description[data_description["enumerate"]]["class"]["enumerate"]
             class_obj = {}
             for key in class_dict:
               class_obj[class_dict[key]] = key
