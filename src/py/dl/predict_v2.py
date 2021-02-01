@@ -162,7 +162,7 @@ def main(args):
       if "enumerate" in data_description and prediction_type is None or prediction_type == "class":
         prediction_type = "class"
         class_obj = {}
-        enumerate_obj = data_description[data_description["enumerate"]]["class"]
+        enumerate_obj = data_description[data_description["enumerate"]]["class"]["enumerate"]
         print(enumerate_obj)
         for key in enumerate_obj:
           class_obj[enumerate_obj[key]] = key 
