@@ -273,7 +273,12 @@ def main(args):
         if(prediction_type == "img" or prediction_type == "seg"):
           image_save(img_obj, prediction, img)
         elif(prediction_type == "class"):
-          prediction_arr.append(np.array(prediction).tolist())
+          if class_obj is not None:
+            argmax = np.argmax(prediction)
+            prediction_arr.append(class_obj[argmax])
+            print("prediction", prediction, "class", class_obj[argmax])
+          else:
+            prediction_arr.append(np.array(prediction).tolist())
         elif(prediction_type == "scalar"):
           prediction_arr.append(prediction.tolist()[0])
           print("prediction", prediction)
