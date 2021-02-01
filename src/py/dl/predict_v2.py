@@ -12,156 +12,7 @@ import pandas
 import csv
 import resample
 
-
-print("Tensorflow version:", tf.__version__)
-
-parser = argparse.ArgumentParser(description='Predict an input with a trained neural network', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-
-in_group = parser.add_mutually_exclusive_group(required=True)
-in_group.add_argument('--img', type=str, help='Input image for prediction')
-in_group.add_argument('--dir', type=str, help='Directory with images for prediction')
-in_group.add_argument('--csv', type=str, help='CSV file with images')
-
-resample_group = parser.add_argument_group('Resample parameters')
-resample_group.add_argument('--resample', type=bool, default=False, help='Resample the image')
-resample_group.add_argument('--size', nargs="+", type=int, help='Output size, -1 to leave unchanged', default=None)
-resample_group.add_argument('--linear', type=bool, help='Use linear interpolation.', default=False)
-resample_group.add_argument('--spacing', nargs="+", type=float, default=None, help='Use a pre defined spacing')
-resample_group.add_argument('--fit_spacing', type=bool, help='Fit spacing to output', default=False)
-resample_group.add_argument('--iso_spacing', type=bool, help='Same spacing for resampled output', default=False)
-resample_group.add_argument('--rgb', type=bool, help='Use RGB type pixel', default=False)
-
-parser.add_argument('--csv_column', type=str, default='img', help='CSV column name (Only used if flag csv is used)')
-parser.add_argument('--csv_root_path', type=str, default='', help='Replaces a root path directory to empty, this is use to recreate a directory structure in the output directory, otherwise, the output name will be the name in the csv (only if csv flag is used)')
-
-image_group = parser.add_argument_group('Image parameters')
-image_group.add_argument('--image_dimension', type=int, help='Image dimension', default=2)
-image_group.add_argument('--pixel_dimension', type=int, help='Pixel dimension. It will try to guess it by default.', default=-1)
-image_group.add_argument('--batch_prediction', type=bool, help='The image is 3D/sequence but the network is for 2D images. i.e., it will use the 3rd dimension as a batch', default=False)
-image_group.add_argument('--shuffle', type=bool, help='Shuffle image in the first dimension', default=False)
-image_group.add_argument('--flip_x', type=bool, help='Flip image x axis', default=False)
-image_group.add_argument('--flip_y', type=bool, help='Flip image y axis', default=False)
-
-model_group = parser.add_argument_group('Model group')
-model_group.add_argument('--model', help='Directory of saved model format')
-model_group.add_argument('--prediction_type', help='Type of prediction. img, seg, class, scalar', default="img")
-model_group.add_argument('--gpu', help='GPU index', type=int, default=0)
-
-out_group = parser.add_argument_group('Output parameters')
-out_group.add_argument('--out', type=str, help='Output image, csv, or directory. If --dir flag is used the output image name will be the <Directory set in out flag>/<image filename in directory dir>', default="out")
-out_group.add_argument('--out_ext', type=str, help='Output extension for images', default='.nrrd')
-out_group.add_argument('--out_basename', type=bool, default=False, help='Keeps only the filename for the output, i.e, does not create a directory structure for the output image filename')
-out_group.add_argument('--ow', type=int, help='Overwrite outputs', default=1)
-out_group.add_argument('--tf1', type=bool, help='Enable tf1', default=False)
-
-args = parser.parse_args()
-
-saved_model_path = args.model
-out_name = args.out
-out_ext = args.out_ext
-prediction_type = args.prediction_type
-tf1 = args.tf1
-
-data_description = None
-class_obj = None
-data_description_filename = os.path.join(saved_model_path, "data_description.json")
-if os.path.exists(data_description_filename):
-  with open(data_description_filename, "r") as f:
-    data_description = json.load(f)
-    print(data_description)
-    if "enumerate" in data_description:
-      prediction_type = "class"
-      class_obj = {}
-      enumerate_obj = data_description[data_description["enumerate"]]["class"]
-      for key in enumerate_obj:
-        class_obj[enumerate_obj[key]] = key 
-      print(class_obj)
-    if "tf1" in data_description and data_description["tf1"]:
-      tf1 = True
-    if "prediction_type" in data_description:
-      prediction_type = data_description["prediction_type"]
-
-
-filenames = []
-
-if(args.img):
-  print('image_name', args.img)
-  fobj = {}
-  fobj["img"] = args.img
-  if(prediction_type == "img" or prediction_type == "seg"):
-    fobj["out"] = out_name
-    if args.ow or not os.path.exists(fobj["out"]):
-      filenames.append(fobj)
-  else:
-    filenames.append(fobj)
-
-else:
-
-  image_filenames = []
-  replace_dir_name = ''
-  if(args.dir):
-    replace_dir_name = args.dir
-    normpath = os.path.normpath("/".join([args.dir, '**', '*']))
-    for img in glob.iglob(normpath, recursive=True):
-      if os.path.isfile(img) and True in [ext in img for ext in [".nrrd", ".nii", ".nii.gz", ".mhd", ".dcm", ".DCM", ".jpg", ".png"]]:
-        image_filenames.append(os.path.realpath(img))
-
-    for img in image_filenames:
-      fobj = {}
-      fobj["img"] = img
-      if(prediction_type == "img" or prediction_type == "seg"):
-        image_dir_filename = img.replace(replace_dir_name, '')
-        if(out_ext):
-          image_dir_filename = os.path.splitext(image_dir_filename)[0] +  out_ext
-
-        if(args.out_basename):
-          image_dir_filename = os.path.basename(image_dir_filename)
-          
-        fobj["out"] = os.path.normpath("/".join([out_name, image_dir_filename]))
-
-        if not os.path.exists(os.path.dirname(fobj["out"])):
-          os.makedirs(os.path.dirname(fobj["out"]))
-
-      if args.ow or ("out" in fobj and not os.path.exists(fobj["out"])) or prediction_type == "class" or prediction_type == "scalar":
-        filenames.append(fobj)
-
-  elif(args.csv):
-    replace_dir_name = args.csv_root_path
-    with open(args.csv) as csvfile:
-      df = pandas.read_csv(csvfile)
-      df.rename({args.csv_column: "img"})
-
-      img_out = []
-
-      if(prediction_type == "img" or prediction_type == "seg"):
-        for index, row in df.iterrows():
-          img = row["img"]
-        
-          image_dir_filename = img.replace(replace_dir_name, '')
-          if(out_ext):
-            image_dir_filename = os.path.splitext(image_dir_filename)[0] +  out_ext
-
-          if(args.out_basename):
-            image_dir_filename = os.path.basename(image_dir_filename)
-            
-          out_fn = os.path.normpath("/".join([out_name, image_dir_filename]))
-
-          if not os.path.exists(os.path.dirname(out_fn)):
-            os.makedirs(os.path.dirname(out_fn))
-
-          if args.ow or not os.path.exists(out_fn):
-            img_out.append(out_fn)
-          else:
-            img_out.append(None)
-      
-      if len(img_out) > 0:
-        df["out"] = img_out
-        df = df[df["out"].notnull()]
-
-      filenames = df.to_dict('records')
-  
-
-def image_read(filename):
+def image_read(filename, args):
 
   if(args.resample):
     img = resample.Resample(filename, args)
@@ -229,7 +80,7 @@ def image_read(filename):
   return img, np.reshape(img_np, tf_img_shape)
 
 
-def image_save(img_obj, prediction):
+def image_save(img_obj, prediction, img):
 
   Dimension = prediction.ndim - 1
   PixelDimension = prediction.shape[-1]
@@ -296,108 +147,229 @@ def image_save(img_obj, prediction):
   writer.UseCompressionOn()
   writer.Update()
 
+def main(args):
+  saved_model_path = args.model
+  out_name = args.out
+  out_ext = args.out_ext
+  prediction_type = args.prediction_type
 
-if(int(tf.__version__.split('.')[0]) > 1):
-  if(tf1):
-    with tf.compat.v1.Session() as sess:
+  data_description = None
+  class_obj = None
+  data_description_filename = os.path.join(saved_model_path, "data_description.json")
+  if os.path.exists(data_description_filename):
+    with open(data_description_filename, "r") as f:
+      data_description = json.load(f)
+      if "enumerate" in data_description and prediction_type is None or prediction_type == "class":
+        prediction_type = "class"
+        class_obj = {}
+        enumerate_obj = data_description[data_description["enumerate"]]["class"]
+        print(enumerate_obj)
+        for key in enumerate_obj:
+          class_obj[enumerate_obj[key]] = key 
+        print(class_obj)
+      if "prediction_type" in data_description:
+        prediction_type = data_description["prediction_type"]
 
-      loaded = tf.compat.v1.saved_model.load(sess=sess, tags=[tf.compat.v1.saved_model.SERVING], export_dir=saved_model_path)
 
-      for img_obj in filenames:
-        try:
-          img, img_np = image_read(img_obj["img"])
+  filenames_df = None
+  if(args.img):
+    filenames_arr = []    
+    print('image_name', args.img)
+    fobj = {}
+    fobj["img"] = args.img
+    if(prediction_type == "img" or prediction_type == "seg"):
+      fobj["out"] = out_name
+      if args.ow or not os.path.exists(fobj["out"]):
+        filenames_arr.append(fobj)
+    else:
+      filenames_arr.append(fobj)
 
-          prediction = sess.run(
-              'output_y:0',
-              feed_dict={
-                  'input_x:0': img_np
-              }
-          )
-          if(args.batch_prediction):
-            prediction = np.array(prediction)
-          else:
-            prediction = np.array(prediction[0])
-          if(prediction_type == "img" or prediction_type == "seg"):
-            image_save(img_obj, prediction)
-          elif(prediction_type == "class"):
-            img_obj["prediction"] = prediction.tolist()
-            if class_obj is not None:
-              argmax = np.argmax(prediction)
-              img_obj["class"] = class_obj[argmax]
-              print("prediction", prediction, "class", class_obj[argmax])
-            else:
-              print("prediction", prediction)
-          elif(prediction_type == "scalar"):
-            img_obj["prediction"] = prediction.tolist()[0]
-            print("prediction", prediction)
-          elif(prediction_type == "array"):
-            img_obj["prediction"] = prediction.tolist()
-            print("prediction", prediction)
-        except Exception as e:
-          print(e, file=sys.stderr)
+    filenames_df = pandas.DataFrame(filenames_arr)
+
   else:
-    with tf.device('/device:GPU:' + str(args.gpu)):
-      model = tf.keras.models.load_model(saved_model_path, custom_objects={'tf': tf})
-      model.summary()
 
-      for img_obj in filenames:
-        try:
-          img, img_np = image_read(img_obj["img"])
+    filenames_arr = []
+    image_filenames = []
+    replace_dir_name = ''
+    if(args.dir):
+      replace_dir_name = args.dir
+      normpath = os.path.normpath("/".join([args.dir, '**', '*']))
+      for img in glob.iglob(normpath, recursive=True):
+        if os.path.isfile(img) and True in [ext in img for ext in [".nrrd", ".nii", ".nii.gz", ".mhd", ".dcm", ".DCM", ".jpg", ".png"]]:
+          image_filenames.append(os.path.realpath(img))
+
+      for img in image_filenames:
+        fobj = {}
+        fobj["img"] = img
+        if(prediction_type == "img" or prediction_type == "seg"):
+          image_dir_filename = img.replace(replace_dir_name, '')
+          if(out_ext):
+            image_dir_filename = os.path.splitext(image_dir_filename)[0] +  out_ext
+
+          if(args.out_basename):
+            image_dir_filename = os.path.basename(image_dir_filename)
+            
+          fobj["out"] = os.path.normpath("/".join([out_name, image_dir_filename]))
+
+          if not os.path.exists(os.path.dirname(fobj["out"])):
+            os.makedirs(os.path.dirname(fobj["out"]))
+
+        if args.ow or ("out" in fobj and not os.path.exists(fobj["out"])) or prediction_type == "class" or prediction_type == "scalar":
+          filenames_arr.append(fobj)
+
+      filenames_df = pandas.DataFrame(filenames_arr)
+      print(filenames_df)
+
+    elif(args.csv):
+      replace_dir_name = args.csv_root_path
+      with open(args.csv) as csvfile:
+        df = pandas.read_csv(csvfile)
+        df.rename({args.csv_column: "img"})
+
+        img_out = []
+
+        if(prediction_type == "img" or prediction_type == "seg"):
+          for index, row in df.iterrows():
+            img = row["img"]
           
-          prediction = model.predict(img_np)
-          if(args.batch_prediction):
-            prediction = prediction
-          else:
-            prediction = prediction[0]
+            image_dir_filename = img.replace(replace_dir_name, '')
+            if(out_ext):
+              image_dir_filename = os.path.splitext(image_dir_filename)[0] +  out_ext
 
-          if(prediction_type == "img" or prediction_type == "seg"):
-            image_save(img_obj, prediction)
-          elif(prediction_type == "class"):
-            img_obj["prediction"] = np.array(prediction).tolist()
-            if class_obj is not None:
-              argmax = np.argmax(prediction)
-              img_obj["class"] = class_obj[argmax]
-              print("prediction", prediction, "class", class_obj[argmax])
+            if(args.out_basename):
+              image_dir_filename = os.path.basename(image_dir_filename)
+              
+            out_fn = os.path.normpath("/".join([out_name, image_dir_filename]))
+
+            if not os.path.exists(os.path.dirname(out_fn)):
+              os.makedirs(os.path.dirname(out_fn))
+
+            if args.ow or not os.path.exists(out_fn):
+              img_out.append(out_fn)
             else:
-              print("prediction", prediction)
-          elif(prediction_type == "scalar"):
-            img_obj["prediction"] = prediction.tolist()[0]
-            print("prediction", prediction)
-          elif(prediction_type == "array"):
-            img_obj["prediction"] = np.reshape(prediction, -1).tolist()
-            print("prediction", img_obj["prediction"])
-        except Exception as e:
-          print(e, file=sys.stderr)
+              img_out.append(None)
+        
+        if len(img_out) > 0:
+          df["out"] = img_out
+          df = df[df["out"].notnull()]
 
-      if(prediction_type == "class" or prediction_type == "scalar"):
-        print("Writing:", args.out)
-        with open(args.out, "w") as f:
-          if len(filenames) > 0:
-            fieldnames = list(filenames[0].keys())
-            writer = csv.DictWriter(f, fieldnames=fieldnames)
-            writer.writeheader()
-            for img_obj in filenames:
-              writer.writerow(img_obj)
-      elif(prediction_type == "array"):
-        print("Writing:", args.out)
-        with open(args.out, "w") as f:
-          json.dump(filenames, f)
+        filenames_df = df
 
-else:
-  with tf.Session() as sess:
+  with tf.device('/device:GPU:' + str(args.gpu)):
+    model = tf.keras.models.load_model(saved_model_path, custom_objects={'tf': tf})
+    model.summary()
 
-    loaded = tf.saved_model.load(sess=sess, tags=[tf.saved_model.SERVING], export_dir=saved_model_path)
+    prediction_arr = []
+    for i, img_obj in filenames_df.iterrows():
+      try:
+        img, img_np = image_read(img_obj["img"], args)
+        
+        prediction = model.predict(img_np)
+        if(args.batch_prediction):
+          prediction = prediction
+        else:
+          prediction = prediction[0]
 
-    for img_obj in filenames:
-      img, img_np = image_read(img_obj["img"])
+        if(prediction_type == "img" or prediction_type == "seg"):
+          image_save(img_obj, prediction, img)
+        elif(prediction_type == "class"):
+          prediction_arr.append(np.array(prediction).tolist())
+        elif(prediction_type == "scalar"):
+          prediction_arr.append(prediction.tolist()[0])
+          print("prediction", prediction)
+        elif(prediction_type == "array"):
+          prediction_arr.append(np.reshape(prediction, -1).tolist())
+          print("prediction", prediction)
+      except Exception as e:
+        print(e, file=sys.stderr)
 
-      prediction = sess.run(
-          'output_y:0',
-          feed_dict={
-              'input_x:0': np.reshape(img_np, (1,) + img_np.shape)
-          }
-      )
+    filenames_df["prediction"] = prediction_arr
 
-      prediction = np.array(prediction[0])
-      image_save(img_obj, prediction)
+    print("Writing:", args.out)
+    filenames_df.to_csv(args.out, index=False)
+
+    # if(prediction_type == "class" or prediction_type == "scalar"):
+      
+    # elif(prediction_type == "array"):
+    #   print("Writing:", args.out)
+    #   with open(args.out, "w") as f:
+    #     json.dump(filenames, f)
+
+if __name__ == "__main__":
+
+  print("Tensorflow version:", tf.__version__)
+
+  parser = argparse.ArgumentParser(description='Predict an input with a trained neural network', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+
+  input_group = parser.add_argument_group('Input parameters')
+
+  in_group = input_group.add_mutually_exclusive_group(required=True)
+  in_group.add_argument('--img', type=str, help='Input image for prediction')
+  in_group.add_argument('--dir', type=str, help='Directory with images for prediction')
+  in_group.add_argument('--csv', type=str, help='CSV file with images. ')
+  input_group.add_argument('--csv_column', type=str, default='img', help='CSV column name (Only used if flag csv is used)')
+  input_group.add_argument('--csv_root_path', type=str, default='', help='Replaces a root path directory to empty, this is use to recreate a directory structure in the output directory, otherwise, the output name will be the name in the csv (only if csv flag is used)')
+
+  resample_group = parser.add_argument_group('Resample parameters')
+  resample_group.add_argument('--resample', type=bool, default=False, help='Resample the image')
+  resample_group.add_argument('--size', nargs="+", type=int, help='Output size, -1 to leave unchanged', default=None)
+  resample_group.add_argument('--linear', type=bool, help='Use linear interpolation.', default=False)
+  resample_group.add_argument('--spacing', nargs="+", type=float, default=None, help='Use a pre defined spacing')
+  resample_group.add_argument('--fit_spacing', type=bool, help='Fit spacing to output', default=False)
+  resample_group.add_argument('--iso_spacing', type=bool, help='Same spacing for resampled output', default=False)
+  resample_group.add_argument('--rgb', type=bool, help='Use RGB type pixel', default=False)
+
+  image_group = parser.add_argument_group('Image parameters')
+  image_group.add_argument('--image_dimension', type=int, help='Image dimension', default=2)
+  image_group.add_argument('--pixel_dimension', type=int, help='Pixel dimension. It will try to guess it by default.', default=-1)
+  image_group.add_argument('--batch_prediction', type=bool, help='The image is 3D/sequence but the network is for 2D images. i.e., it will use the 3rd dimension as a batch', default=False)
+  image_group.add_argument('--shuffle', type=bool, help='Shuffle image in the first dimension', default=False)
+  image_group.add_argument('--flip_x', type=bool, help='Flip image x axis', default=False)
+  image_group.add_argument('--flip_y', type=bool, help='Flip image y axis', default=False)
+
+  model_group = parser.add_argument_group('Model group')
+  model_group.add_argument('--model', help='Directory of saved model format')
+  model_group.add_argument('--prediction_type', help='Type of prediction. img, seg, class, scalar', default="img")
+  model_group.add_argument('--gpu', help='GPU index', type=int, default=0)
+  model_group.add_argument('--predict_cross', help='Predict all folds from a cross validation training. Use --csv flag with name of csv without "_fold0_test.csv"', type=int, default=0)
+
+  out_group = parser.add_argument_group('Output parameters')
+  out_group.add_argument('--out', type=str, help='Output image, csv, or directory. If --dir flag is used the output image name will be the <Directory set in out flag>/<image filename in directory dir>', default="out")
+  out_group.add_argument('--out_ext', type=str, help='Output extension for images', default='.nrrd')
+  out_group.add_argument('--out_basename', type=bool, default=False, help='Keeps only the filename for the output, i.e, does not create a directory structure for the output image filename')
+  out_group.add_argument('--ow', type=int, help='Overwrite outputs', default=1)
+
+  args = parser.parse_args()
+
+  if args.predict_cross and args.csv:
+    csv_in = args.csv
+
+    csv_folds = os.path.splitext(csv_in)[0] + '*fold*_test.csv'
+    out_csv = args.out
+    model_dir = args.model
     
+    for csv_fn in glob.iglob(csv_folds):
+      args.csv = csv_fn
+      out_name = os.path.basename(csv_fn).replace("_test.csv", "_prediction.csv")
+      args.out = os.path.join(os.path.splitext(out_csv)[0], out_name)
+      model_name = os.path.basename(csv_fn).replace("_test.csv", "_train")
+      args.model = os.path.join(model_dir, model_name)
+      print("Predict cross validation fold.")
+      # main(args)
+
+    print("Saving full df.")
+    full_df = None
+    for csv_fn in glob.iglob(csv_folds):
+      in_name = os.path.join(os.path.splitext(out_csv)[0], os.path.basename(csv_fn).replace("_test.csv", "_prediction.csv"))
+      print(in_name)
+      if full_df is None:
+        full_df = pandas.read_csv(in_name)
+      else:
+        full_df = full_df.append(pandas.read_csv(in_name), ignore_index = True)
+    out_name_full_df = os.path.splitext(csv_in)[0] + "_prediction_all.csv"
+    print("Writing:", out_name_full_df)
+    full_df.to_csv(out_name_full_df, index=False)
+      
+
+  else:
+    main(args)
