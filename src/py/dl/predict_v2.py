@@ -224,7 +224,7 @@ def main(args):
       replace_dir_name = args.csv_root_path
       with open(args.csv) as csvfile:
         df = pandas.read_csv(csvfile)
-        df.rename({args.csv_column: "img"})
+        df.rename({args.csv_column: "img"}, inplace=True)
 
         img_out = []
 
