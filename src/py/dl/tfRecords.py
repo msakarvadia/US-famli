@@ -60,8 +60,6 @@ def main(args):
 	else:
 		row_keys = list(df.columns.values)
 
-	if("tfRecord" in row_keys):
-		row_keys.remove("tfRecord")
 	if(not "data_keys" in obj):
 		obj["data_keys"] = row_keys
 
@@ -131,6 +129,9 @@ def main(args):
 		
 		row_keys.append('class_weights')
 
+		obj["enumerate"] = args.bins_column
+		obj[args.bins_column] = {}
+		obj[args.bins_column]["class"] = {}
 		obj[args.bins_column]["num_class"] = np.shape(unique_classes)[0]
 		obj[args.bins_column]["class"]["weights"] = unique_classes_obj_str
 		obj[args.bins_column]["class"]["enumerate"] = {}
@@ -360,7 +361,7 @@ def main(args):
 				else:
 					try:
 						# If the previous failed, try converting it to float
-						feature[key] = _float_feature(np.array([float(row[key])]).tolist())
+						feature[key] = _float_feature(float(row[key]))
 
 						if(not "shape" in obj[key]):
 							obj[key]["shape"] = [1]
