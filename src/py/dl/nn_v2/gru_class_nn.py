@@ -88,7 +88,9 @@ class NN(tf.keras.Model):
         drop_prob = args.drop_prob
 
         data_description = tf_inputs.get_data_description()
+        print("data description: ", str(data_description))
         self.num_channels = data_description[data_description["data_keys"][0]]["shape"][-1]
+        print("num channels: ", self.num_channels)
 
         self.num_classes = 2
         self.class_weights_index = -1
@@ -133,6 +135,8 @@ class NN(tf.keras.Model):
     def make_gru_network(self):
 
         x0 = tf.keras.Input(shape=[None, self.num_channels])
+        #x0 = tf.keras.Input(shape=[None,256,256, self.num_channels])
+        #x0 = tf.keras.Input(shape=(4,))
 
         x = layers.Masking(mask_value=-1.0)(x0)
 
@@ -150,6 +154,7 @@ class NN(tf.keras.Model):
 
         x = tf.concat([x_h_fwd, x_a_fwd, x_h_bwd, x_a_bwd], axis=-1)
 
+        #x = layers.Dense(self.num_channels, activation='softmax', use_bias=False, name='inputs')(x)
         x = layers.Dense(self.num_classes, activation='softmax', use_bias=False, name='predictions')(x)
 
         return tf.keras.Model(inputs=x0, outputs=x)
@@ -168,7 +173,11 @@ class NN(tf.keras.Model):
         with tf.GradientTape() as tape:
             
             # images = tf.map_fn(lambda x: tf.random.shuffle(x), images)
+            print("image shape:", images.shape)
+            print("image type:", type(images))
+            images = tf.reshape(images, [images.shape[0], images.shape[1]*images.shape[2]*images.shape[3], images.shape[4]])
             x_c = self.gru_class(images, training=True)
+            print("x_c shape: ", x_c.shape)
             loss = self.classification_loss(tf.reshape(tf.one_hot(tf.cast(labels, tf.int32), self.num_classes), tf.shape(x_c)), x_c, sample_weight=sample_weight)
 
             var_list = self.trainable_variables
